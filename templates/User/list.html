@@ -1,0 +1,44 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <div class="form-inline mx-sm-3 mb-2">
+        <a class="form-control btn btn-success" href="/user/create">Create</a>
+    </div>
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Username
+                </th>
+                <th scope="col">
+                    Access Level
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item['username'] }}
+                    </td>
+                    <td>
+                        {{ item['access_level'] }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-warning" href="/user/edit?id={{ item['id']}}">Edit</a>
+                            <a class="btn btn-danger" href="/user/delete?id={{ item['id']}}">Delete</a>
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}

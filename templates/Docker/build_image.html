@@ -1,0 +1,33 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<form action="/docker/image/build" method="post">
+    <div class="form-row" id="createform">
+        <input hidden name="bname" value="{{branch}}"/>
+        <input hidden name="pid" value="{{project}}"/>
+        <input hidden name="gitlab" value="{{gitlab}}"/>
+
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Path</label>
+            <input class="form-control" name="path" required value="./{{branch}}" />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Tag</label>
+            <input class="form-control" name="tag" value="1.0"/>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Run</label>
+            <select name="run" type="text" class="form-control">
+                {% if run=="0" %}
+                <option value="1">Yes</option>
+                <option value="0" selected>No</option>
+                {% else %}
+                <option value="1" selected>Yes</option>
+                <option value="0" >No</option>
+                {% end %}
+            </select>
+        </div>
+    </div>
+    <input type="submit" value="Submit" class="btn btn-success btn-lg" />
+</form>
+{% end %}

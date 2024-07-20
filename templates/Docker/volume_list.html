@@ -1,0 +1,38 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <div class="form-inline mx-sm-3 mb-2">
+        <a class="form-control btn btn-success" href="/docker/volume/create">Create</a>
+    </div>
+
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Name
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item.name }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-danger" href="/docker/volume/delete?id={{ item.id}}">Delete</a>
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}

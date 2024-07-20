@@ -1,0 +1,6 @@
+﻿requests==2.26.0
+docker==7.0.0
+redis==4.5.5
+tornado==6.4
+python-nginx==1.5.7
+python-gitlab==4.6.0

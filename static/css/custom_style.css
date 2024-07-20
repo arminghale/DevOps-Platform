@@ -1,0 +1,33 @@
+﻿* {
+    outline: none;
+}
+
+.custom-select-new select {
+    background: transparent;
+    width: 200px;
+    height: 35px;
+    padding: 5px;
+    font-size: 16px;
+    line-height: 1;
+    border: 0;
+    border-radius: 0;
+    -webkit-appearance: none;
+}
+
+.custom-select-new {
+    width: 180px;
+    height: 35px;
+    overflow: hidden;
+    /*background: url(https://dl.dropbox.com/u/122540013/img/arrow.png) no-repeat right #fff;*/
+    border: 1px solid #c3c3c3;
+    border-radius: 3px 5px 5px 3px;
+    margin-bottom: 10px;
+}
+
+    .custom-select-new select {
+        padding-right: 0;
+        vertical-align: top !important;
+        text-align: left;
+        height: auto;
+        line-height: 1em;
+    }

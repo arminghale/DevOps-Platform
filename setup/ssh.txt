@@ -1,0 +1,2 @@
+﻿ssh-keygen
+cat "pub key" | ssh "user"@"ip" "mkdir .ssh && touch .ssh/authorized_keys && cat >> .ssh/authorized_keys"

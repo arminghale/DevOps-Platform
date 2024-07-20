@@ -1,0 +1,18 @@
+sudo apt update
+
+sudo apt install python3.11
+sudo apt install python3-pip
+
+-----------------------------------------------------------------------------------
+sudo apt install docker.io
+
+--------------------------------------------------------------------
+sudo apt install nginx
+
+sudo ufw app list
+sudo ufw allow 'Nginx Full'
+
+systemctl status nginx
+
+------------------------------------------------------------------------------
+

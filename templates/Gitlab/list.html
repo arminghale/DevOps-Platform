@@ -1,0 +1,49 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <div class="form-inline mx-sm-3 mb-2">
+        <a class="form-control btn btn-success" href="/gitlab/credential/create">Create</a>
+    </div>
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Token
+                </th>
+                <th scope="col">
+                    Domain
+                </th>
+                <th scope="col">
+                    User
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item['token'] }}
+                    </td>
+                    <td>
+                        {{ item['domain'] }}
+                    </td>
+                    <td>
+                        {{ item['user'] }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-danger" href="/gitlab/credential/delete?id={{ item['id']}}">Delete</a>
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}

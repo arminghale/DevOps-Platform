@@ -1,0 +1,81 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <form class="form-inline" asp-action="Index">
+        <div class="form-group mx-sm-3 mb-4">
+            <select id="gitlabs" type="text" class="form-control">
+                <option value="">choose</option>
+                {% for g in list %}
+                {% if selected_gitlab==g['id']%}
+                <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
+                {% else %}
+                <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
+                {% end %}
+                {% end %}
+            </select>
+        </div>
+        <div class="form-group mx-sm-3 mb-4">
+            <select id="projects" type="text" class="form-control">
+                <option value="">choose</option>
+                {% for p in list2 %}
+                {% if selected_project==p['id']%}
+                <option value="{{p['id']}}" selected>{{p['name']}}</option>
+                {% else %}
+                <option value="{{p['id']}}">{{p['name']}}</option>
+                {% end %}
+                {% end %}
+            </select>
+        </div>
+    </form>
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Name
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item['name'] }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-primary"  href="/gitlab/branch?bname={{ item['name']}}">Show</a>
+                            <a class="btn btn-secondary" target="_blank" href="{{ item['web_url']}}">Open</a>
+                            <a class="btn btn-success" href="/docker/image/build?bname={{ item['name']}}&pid={{handler.get_cookie("selected_project")}}&gitlab={{handler.get_cookie("selected_gitlab")}}&run=1">Build & Deploy</a>
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}
+
+{% block script %}
+<script>
+    $("#gitlabs").change(function () {
+        var id = $(this).find(":selected").val();
+        if (id){
+            $.cookie('selected_gitlab', id, { path: '/gitlab/branch' });
+            window.location.reload();
+        }
+    });
+    $("#projects").change(function () {
+        var id = $(this).find(":selected").val();
+        if (id){
+            $.cookie('selected_project', id, { path: '/gitlab/branch' });
+            window.location.reload();
+        }
+    });
+</script>
+{% end %}

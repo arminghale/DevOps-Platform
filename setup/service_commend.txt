@@ -1,0 +1,5 @@
+﻿sudo mv devops.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable devops.service
+sudo systemctl start devops.service
+sudo systemctl status devops.service

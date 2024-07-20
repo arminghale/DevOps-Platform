@@ -1,0 +1,150 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<form action="/docker/image/run" method="post">
+    <div class="form-row" id="createform">
+        <input name="id" value="{{ image.id }}" hidden/>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Name</label>
+            <input class="form-control" name="name" value="{{image.tags[0].split(':')[0]}}" required />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Port</label>
+            <input class="form-control" name="port" type="number" required/>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">IP</label>
+            <select name="ip" type="text" class="form-control">
+                <option value="127.0.0.1" selected>Local</option>
+                <option value="expose" >Expose</option>
+            </select>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Environment</label>
+            <input class="form-control" name="env" placeholder="Seperate Items with ," />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Restart Policy</label>
+            <select name="restart_policy" type="text" class="form-control">
+                <option value="always" selected>Always</option>
+                <option value="on-failure" >On Failure</option>
+            </select>
+            <hr />
+            <input class="form-control" name="on_failure_retry" placeholder="on_failure_retry" type="number" value="1" disabled />
+        </div>
+        <div class="form-group col-md-12">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Volume</label>
+            <a class="btn btn-outline-primary" data-toggle="modal" data-target="#VModal" data-method="addvolume()">Add</a>
+            <div id="vols">
+                <input hidden name='volumes' id="volumes" value="" />
+            </div>
+        </div>
+    </div>
+    <input type="submit" value="Submit" class="btn btn-success btn-lg" />
+</form>
+{% end %}
+
+{% block modals %}
+<div class="modal fade" id="VModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="body">
+                <div class="form-row">
+                    <div class="form-group col-md-4">
+                        <select id="volumes_opts" type="text" class="form-control">
+                            <option value="" selected>Choose</option>
+                            {% for v in volumes %}
+                            <option value="{{v.id}}">{{v.name}}</option>
+                            {% end %}
+                        </select>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <input class="form-control" id="volume_bind" placeholder="Bind Directory" value="/data" />
+                    </div>
+                    <div class="form-group col-md-4">
+                        <input class="form-control" id="volume_mode" placeholder="Mode (rw | ro)" value="rw" />
+                    </div>
+                    <div class="form-group col-md-4">
+                        <span id="result"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" id="but" onclick="">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% end %}
+
+
+{% block script %}
+<script>
+        $("[name='restart_policy']").change(function () {
+            var policy = $(this).find(":selected").val();
+            if (policy=="on-failure"){
+                $("[name='on_failure_retry']").prop("disabled", false);
+            }else{
+                $("[name='on_failure_retry']").prop("disabled", true);
+            }
+        });
+
+</script>
+<script>
+    $('#VModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget);
+        var modal = $(this);
+        var method = button.data('method');
+        modal.find('#but').attr('onclick', method);
+    });
+
+    function addvolume() { 
+        volume_id=$("#volumes_opts").find(":selected").val();
+        volume_name=$("#volumes_opts").find(":selected").text();
+        if (volume_id){
+            bind=$("#volume_bind").val()
+            mode=$("#volume_mode").val()
+
+            now_vols=$("#volumes").val()
+            if (now_vols){now_vols+","}
+            $("#volumes").val(now_vols+volume_id+"||"+bind+"||"+mode)
+            console.log(now_vols)
+            console.log($("#volumes").val())
+
+            element="<div class='form-group col-md-12'>"
+            // element+="<input hidden name='volumes' value='"+volume_id+"||"+bind+"||"+mode +"' />"
+            element+="<label class='control-label col-md-4' style='font-weight: bold;text-align:center;'>"+volume_name+"</label>"
+            element+="<label class='control-label col-md-4' style='font-weight: bold;text-align:center;'>"+bind+"</label>"
+            element+="<label class='control-label col-md-2' style='font-weight: bold;text-align:center;'>"+mode+"</label>"
+            element+='<a class="btn btn-outline-danger" href="javascript:;" onclick="deletevolume(event,\''+volume_id+'\',\''+volume_name+'\',\''+bind+'\',\''+mode+'\')">Delete</a>'
+            element+="</div>"
+
+            $("#vols").append(element)
+            
+
+            $("#volumes_opts").find(":selected").remove();
+            $("#volumes_opts").prop("selectedIndex", 0).prop("selected",true);
+            $("#volume_bind").val("/data")
+            $("#volume_mode").val("rw")
+            var modal = $("#VModal");
+            modal.modal('toggle');
+        }
+    }
+
+    
+    function deletevolume(e,id,name,bind,mode){
+        $("#volumes_opts").append("<option value='"+id+"'>"+name+"</option>");
+        var arr=$("#volumes").val().split(',')
+        arr = $.grep(arr, function(value) {
+                    return value != id+"||"+bind+"||"+mode;
+                });
+        $("#volumes").val(arr.join(","))
+        $(e.target).parent().remove()
+    }
+</script>
+{% end %}

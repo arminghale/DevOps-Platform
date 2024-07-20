@@ -1,0 +1,48 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <div class="form-inline mx-sm-3 mb-2">
+    </div>
+
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Name
+                </th>
+                <th scope="col">
+                    Status
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for i,item in enumerate(items) %}
+                <tr>
+                    <td>
+                        {{ item }}
+                    </td>
+                    <td>
+                        {{ in_use[i] }}
+                    </td>
+                    <td>
+                        <div>
+                            {% if in_use[i]=="active" %}
+                            <a class="btn btn-danger" href="/monitor/stop?id={{ item}}">Stop</a>
+                            <a class="btn btn-success" href="http://{{href[i]}}" target="_blank">Open</a>
+                            {% else %}
+                            <a class="btn btn-primary" href="/monitor/start?id={{ item}}">Start</a>
+                            {% end %}
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}

@@ -1,0 +1,47 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Name
+                </th>
+                <th scope="col">
+                    Status
+                </th>
+                <th scope="col">
+                    Image
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item.name }}
+                    </td>
+                    <td>
+                        {{ item.status }}
+                    </td>
+                    <td>
+                        {{ item.image.tags[0] }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-danger" href="/docker/container/delete?id={{ item.id}}">Delete</a>
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}
