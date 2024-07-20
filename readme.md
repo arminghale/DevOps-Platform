@@ -1,4 +1,3 @@
-﻿```markdown
 # Project Management and Deployment Platform 🚀
 
 ## Introduction
@@ -37,4 +36,3 @@ Hope you test this out and share your thoughts to make it better and more user-f
 ---
 
 Happy Deploying! 🚀
-```
