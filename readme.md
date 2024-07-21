@@ -1,4 +1,3 @@
-﻿```markdown
 # Project Management and Deployment Platform 🚀
 
 ## Introduction
@@ -22,7 +21,7 @@ This is my first version, and I'm new to this! It has a few bugs and isn't fully
 - **Requirements**: Python 3.11+ and Docker 24.0+, Nginx is optional.
 
 ### How to Run
-1. **Run Main Script**: Just fire up `main.py`.
+1. **Run Main Script**: Just fire up `main.py` (after installing requirements.txt).
    - **Default Port**: 444
    - **Default Authentication**: Located in the setup folder.
    - You can tweak settings in `main.py`.
@@ -37,4 +36,3 @@ Hope you test this out and share your thoughts to make it better and more user-f
 ---
 
 Happy Deploying! 🚀
-```
