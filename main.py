@@ -635,10 +635,11 @@ class BuildImageDockerHandler(BaseHandler):
 
         try:
             
-            path= self.get_argument("path")
+            spath= self.get_argument("spath")
+            bpath= self.get_argument("bpath")
             tag= self.get_argument("tag")
 
-            if not path or not tag or not branch or not project or not gitlab:
+            if not spath or not bpath or not tag or not branch or not project or not gitlab:
                 self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=fill out all entries")
 
             r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
@@ -652,12 +653,12 @@ class BuildImageDockerHandler(BaseHandler):
                 self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=no access to selected gitlab")
 
             gl=GitlabModel(selected_gitlab['token'],selected_gitlab['domain'])  
-            gl.Clone(project,branch,path)
+            gl.Clone(project,branch,spath)
 
             docker_client=docker.from_env()
-            image=docker_client.images.build(tag=tag, path=path, rm=True)[0]
+            image=docker_client.images.build(tag=tag, path=f"{spath}{bpath}", rm=True)[0]
 
-            os.rmdir(path)
+            os.rmdir(spath)
 
             if run>0:
                 self.redirect(f"/docker/image/run?id={image.id}")
