@@ -1,13 +1,17 @@
 ﻿import asyncio
 import hashlib
+from io import BytesIO
 import json
 import logging
 import os
+from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
 import typing
 import time
+import zipfile
 
 import docker.models
 import docker.models.containers
@@ -704,13 +708,10 @@ class ListVolumeDockerHandler(BaseHandler):
     async def get(self) -> None:
         try:
             error=self.get_argument("e","")
-            if error:
-                self.render("Docker/volume_list.html",error=error,title="Docker Volume List")
-                return
 
             docker_client=docker.from_env()
             volumes=docker_client.volumes.list()
-            self.render("Docker/volume_list.html",items=volumes,title="Docker Volume List")
+            self.render("Docker/volume_list.html",error=error,items=volumes,title="Docker Volume List")
             return
         except Exception as e:
             self.render("Docker/volume_list.html",error=f"system error: {e}",title="Docker Volume List")
@@ -763,6 +764,48 @@ class DeleteVolumeDockerHandler(BaseHandler):
             docker_client.volumes.get(id).remove(force=True)
 
             self.redirect("/docker/volume")
+        except Exception as e:
+            self.redirect(f"/docker/volume?e=system error: {e}")
+
+class DownloadVolumeDockerHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            id=self.get_argument("id","")
+            if not id:
+                self.redirect("/docker/volume")
+
+            docker_client=docker.from_env()
+            volume=docker_client.volumes.get(id)
+            image=docker_client.images.pull("busybox","latest")
+
+            volumes_config={}
+            volumes_config[volume.name]={"bind":"/volume","mode":"rw"}
+            volumes_config[f"{os.getcwd()}/volume_data"]={"bind":"/volume_data","mode":"rw"}
+
+            container=docker_client.containers.run(image,volumes=volumes_config,detach=True
+                                                   ,command="cp -a /volume/. /volume_data")
+            container.remove(force=True)
+
+            dir = Path(f"{os.getcwd()}/volume_data")
+            f=BytesIO()
+            with zipfile.ZipFile(f"{os.getcwd()}/data.zip", "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for entry in dir.rglob("*"):
+                    zip_file.write(entry, entry.relative_to(dir))
+                zip_file.close()
+            
+            shutil.rmtree(f"{os.getcwd()}/volume_data", ignore_errors=True)
+            
+            f=open(f"{os.getcwd()}/data.zip","rb")
+            self.set_header('Content-Type', 'application/zip')
+            self.set_header("Content-Disposition", "attachment; filename=%s" % "data.zip")
+            self.write(f.read())
+            f.close()
+            
+            os.remove(f"{os.getcwd()}/data.zip")
+                
+            self.finish()
+
         except Exception as e:
             self.redirect(f"/docker/volume?e=system error: {e}")
 
@@ -952,6 +995,7 @@ async def tornado_main():
         (r'/docker/volume', ListVolumeDockerHandler),
         (r'/docker/volume/create', CreateVolumeDockerHandler),
         (r'/docker/volume/delete', DeleteVolumeDockerHandler),
+        (r'/docker/volume/download', DownloadVolumeDockerHandler),
 
         (r'/monitor', ListMonitorHandler),
         (r'/monitor/start', StartMonitorHandler),
