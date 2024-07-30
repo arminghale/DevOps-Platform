@@ -9,9 +9,10 @@ Hey there! Welcome to your one-stop platform for managing projects and deploymen
 - **Docker Management**: Connect to your server's Docker, manage images, containers, and volumes. Pull images and run them with custom settings.
 - **Nginx Configurations**: If you have Nginx installed, manage configurations directly—add new ones or remove old ones without diving into Nginx files.
 - **Monitoring Systems**: Activate default configurations for monitoring systems like Grafana or Prometheus with ease.
+- **CI/CD Systems**: Managing configuration, create/edit/delete CI/CD configes and execute them with one click.
 
 ### A Little Disclaimer 🐞
-This is my first version, and I'm new to this! It has a few bugs and isn't fully complete (CI/CD system coming soon!). I'd love your feedback—there are definitely more stable and high-performance tools out there, but hey, I wanted to give this a shot. (Be kind, okay? 😉)
+This is my first version, and I'm new to this! It has a few bugs and isn't fully complete. I'd love your feedback—there are definitely more stable and high-performance tools out there, but hey, I wanted to give this a shot. (Be kind, okay? 😉)
 
 ## Setup
 
