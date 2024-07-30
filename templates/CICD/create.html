@@ -1,36 +1,97 @@
 ﻿{% extends "../base.html" %}
 
 {% block body %}
-<form action="/docker/image/run" method="post">
+<form action="/cicd/create" method="post">
     <div class="form-row" id="createform">
-        <input name="id" value="{{ image.id }}" hidden/>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Gitlab</label>
+            <select name="gitlab" id="gitlabs" type="text" class="form-control">
+                {% if not selected_gitlab %}
+                <option value="" selected>Choose</option>
+                {% end %}
+                {% for g in gitlabs %}
+                {% if selected_gitlab==g['id']%}
+                <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
+                {% else %}
+                <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
+                {% end %}
+                {% end %}            
+            </select>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Project</label>
+            <select name="project" id="projects" type="text" class="form-control">
+                {% if not selected_project %}
+                <option value="" selected>Choose</option>
+                {% end %}
+                {% for p in projects %}
+                {% if selected_project==p['id']%}
+                <option value="{{p['id']}}" selected>{{p['name']}}</option>
+                {% else %}
+                <option value="{{p['id']}}">{{p['name']}}</option>
+                {% end %}
+                {% end %}            
+            </select>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Branch</label>
+            <select name="branch" type="text" class="form-control">
+                <option value="" selected>Choose</option>
+                {% for b in branches %}
+                <option value="{{b['name']}}">{{b['name']}}</option>
+                {% end %}            
+            </select>
+        </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Name</label>
-            <input class="form-control" name="name" value="{{image.tags[0].split(':')[0]}}" required />
+            <input class="form-control" name="name" />
+        </div>
+        <hr/>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Image Name</label>
+            <input class="form-control" name="image_name" />
+        </div>
+        <div class="form-group col-md-5">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Saved Path (Where to clone the project)</label>
+            <input class="form-control" name="image_spath" required />
+        </div>
+        <div class="form-group col-md-5">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Build Path (Path to DockerFile)</label>
+            <input class="form-control" name="image_bpath" required value="/" />
+        </div>
+        <div class="form-group col-md-2">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Tag</label>
+            <input class="form-control" name="image_tag" value="1.0"/>
+        </div>
+        <hr/>
+        <hr/>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Container Name</label>
+            <input class="form-control" name="container_name" required />
         </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Port</label>
-            <input class="form-control" name="port" type="number" required/>
+            <input class="form-control" name="container_port" type="number" required/>
         </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">IP</label>
-            <select name="ip" type="text" class="form-control">
+            <select name="container_ip" type="text" class="form-control">
                 <option value="127.0.0.1" selected>Local</option>
                 <option value="expose" >Expose</option>
             </select>
         </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Environment</label>
-            <input class="form-control" name="env" placeholder="Seperate Items with , (Example: NAME=mike,VERSION=1.85.5)" />
+            <input class="form-control" name="container_env" placeholder="Seperate Items with , (Example: NAME=mike,VERSION=1.85.5)" />
         </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Restart Policy</label>
-            <select name="restart_policy" type="text" class="form-control">
+            <select name="container_restart_policy" type="text" class="form-control">
                 <option value="always" selected>Always</option>
                 <option value="on-failure" >On Failure</option>
             </select>
             <hr />
-            <input class="form-control" name="on_failure_retry" placeholder="On Failure Retry" type="number" value="1" disabled />
+            <input class="form-control" name="container_on_failure_retry" placeholder="On Failure Retry" type="number" value="1" disabled />
         </div>
         <div class="form-group col-md-12">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Volume</label>
@@ -43,6 +104,7 @@
     <input type="submit" value="Submit" class="btn btn-success btn-lg" />
 </form>
 {% end %}
+
 
 {% block modals %}
 <div class="modal fade" id="VModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
@@ -85,16 +147,34 @@
 
 {% block script %}
 <script>
-        $("[name='restart_policy']").change(function () {
-            var policy = $(this).find(":selected").val();
-            if (policy=="on-failure"){
-                $("[name='on_failure_retry']").prop("disabled", false);
-            }else{
-                $("[name='on_failure_retry']").prop("disabled", true);
-            }
-        });
+    $("[name='container_restart_policy']").change(function () {
+        var policy = $(this).find(":selected").val();
+        if (policy=="on-failure"){
+            $("[name='container_on_failure_retry']").prop("disabled", false);
+        }else{
+            $("[name='container_on_failure_retry']").prop("disabled", true);
+        }
+    });
 
 </script>
+
+<script>
+    $("#gitlabs").change(function () {
+        var id = $(this).find(":selected").val();
+        if (id){
+            $.cookie('selected_gitlab', id, { path: '/cicd' });
+            window.location.reload(true);
+        }
+    });
+    $("#projects").change(function () {
+        var id = $(this).find(":selected").val();
+        if (id){
+            $.cookie('selected_project', id, { path: '/cicd' });
+            window.location.reload(true);
+        }
+    });
+</script>
+
 <script>
     $('#VModal').on('show.bs.modal', function (event) {
         var button = $(event.relatedTarget);
@@ -112,7 +192,7 @@
 
             now_vols=$("#volumes").val()
             if (now_vols){now_vols+","}
-            $("#volumes").val(now_vols+volume_id+"||"+bind+"||"+mode)
+            $("#volumes").val(now_vols+volume_id+"||"+volume_name+"||"+bind+"||"+mode)
             console.log(now_vols)
             console.log($("#volumes").val())
 

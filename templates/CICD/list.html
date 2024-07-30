@@ -1,0 +1,52 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <div class="form-inline mx-sm-3 mb-2">
+        <a class="form-control btn btn-success" href="/cicd/create">Create</a>
+    </div>
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    ID
+                </th>
+                <th scope="col">
+                   Name
+                </th>
+                <th scope="col">
+                    User|Gitlab|Project|Branch
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for item in items %}
+                <tr>
+                    <td>
+                        {{ item['id'] }}
+                    </td>
+                    <td>
+                        {{ item['name'] }}
+                    </td>
+                    <td>
+                        {{ item['gitlab'] }}|{{ item['project'] }}|{{ item['branch'] }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-primary" href="/cicd/run?id={{ item['id']}}">Run</a>
+                            <a class="btn btn-primary" href="/cicd?id={{ item['id']}}">Details</a>
+                            <a class="btn btn-warning" href="/cicd/edit?id={{ item['id']}}">Edit</a>
+                            <a class="btn btn-danger" href="/cicd/delete?id={{ item['id']}}">Delete</a>
+                        </div>
+
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}

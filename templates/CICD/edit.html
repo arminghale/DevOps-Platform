@@ -1,0 +1,238 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<form action="/cicd/edit" method="post">
+    <div class="form-row" id="createform">
+        <input name="id" value="{{item['id']}}" hidden/>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Gitlab</label>
+            <select name="gitlab" id="gitlabs" type="text" class="form-control">
+                {% for g in gitlabs %}
+                {% if selected_gitlab==g['id']%}
+                <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
+                {% else %}
+                <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
+                {% end %}
+                {% end %}            </select>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Project</label>
+            <select name="project" id="projects" type="text" class="form-control">
+                {% for p in projects %}
+                {% if selected_project==p['id']%}
+                <option value="{{p['id']}}" selected>{{p['name']}}</option>
+                {% else %}
+                <option value="{{p['id']}}">{{p['name']}}</option>
+                {% end %}
+                {% end %}            
+            </select>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Branch</label>
+            <select name="branch" type="text" class="form-control">
+                {% for b in branches %}
+                {% if selected_gitlab==item['gitlab_id'] and selected_project==item['project_id'] and item['branch']==b['name']%}
+                <option value="{{b['name']}}" selected>{{b['name']}}</option>
+                {% else %}
+                <option value="{{b['name']}}">{{b['name']}}</option>
+                {% end %}
+                
+                {% end %}            
+            </select>
+        </div>
+        <div class="form-group col-md-6">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Name</label>
+            <input class="form-control" name="name" value="{{item['name']}}" required />
+        </div>
+        <hr/>
+        <div class="form-group col-md-6">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Image Name</label>
+            <input class="form-control" name="image_name" value="{{item['image_name']}}" required />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Saved Path (Where to clone the project)</label>
+            <input class="form-control" name="image_spath" value="{{item['image_spath']}}" required />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Build Path (Path to DockerFile)</label>
+            <input class="form-control" name="image_bpath" value="{{item['image_bpath']}}" required />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Tag</label>
+            <input class="form-control" name="image_tag" value="{{item['image_tag']}}" required/>
+        </div>
+        <hr/>
+        <hr/>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Container Name</label>
+            <input class="form-control" name="container_name" value="{{item['container_name']}}" required />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Port</label>
+            <input class="form-control" name="container_port" value="{{item['container_port']}}" type="number" required/>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">IP</label>
+            <select name="container_ip" type="text" class="form-control">
+                <option value="127.0.0.1" {{"selected" if item['container_ip']=="127.0.0.1" else None}}>Local</option>
+                <option value="expose" {{"selected" if item['container_ip']=="expose" else None}}>Expose</option>
+            </select>
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Environment</label>
+            <input class="form-control" name="container_env" value="{{item['container_env']}}" placeholder="Seperate Items with , (Example: NAME=mike,VERSION=1.85.5)" />
+        </div>
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Restart Policy</label>
+            <select name="container_restart_policy" type="text" class="form-control">
+                <option value="always" {{"selected" if item['container_restart_policy']=="always" else None}}>Always</option>
+                <option value="on-failure" {{"selected" if item['container_restart_policy']=="on-failure" else None}}>On Failure</option>
+            </select>
+            <hr />
+            <input class="form-control" name="container_on_failure_retry" value="{{item['container_on_failure_retry']}}" placeholder="On Failure Retry" type="number" {{"disabled" if item['container_restart_policy']!="on-failure" else None}} />
+        </div>
+        <div class="form-group col-md-12">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Volume</label>
+            <a class="btn btn-outline-primary" data-toggle="modal" data-target="#VModal" data-method="addvolume()">Add</a>
+            <div id="vols">
+                <input hidden name='volumes' value="{{item['volumes']}}" id="volumes" />
+                {% for v in item['volumes'].split(',') %}
+                <div class='form-group col-md-12'>
+                    <label class='control-label col-md-4' style='font-weight: bold;text-align:center;'>{{v.split("||")[1]}}</label>
+                    <label class='control-label col-md-4' style='font-weight: bold;text-align:center;'>{{v.split("||")[2]}}</label>
+                    <label class='control-label col-md-2' style='font-weight: bold;text-align:center;'>{{v.split("||")[3]}}</label>
+                    <a class="btn btn-outline-danger" href="javascript:;" onclick="deletevolume(event,'{{v.split('||')[0]}}','{{v.split('||')[1]}}','{{v.split('||')[2]}}','{{v.split('||')[3]}}')">Delete</a>
+                </div>
+                {% end %}
+            </div>
+        </div>
+    </div>
+    <input type="submit" value="Submit" class="btn btn-success btn-lg" />
+</form>
+{% end %}
+
+
+{% block modals %}
+<div class="modal fade" id="VModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="body">
+                <div class="form-row">
+                    <div class="form-group col-md-4">
+                        <select id="volumes_opts" type="text" class="form-control">
+                            <option value="" selected>Choose</option>
+                            {% for v in volumes %}
+                            {% if not any(v['id']==x.split('||')[0] for x in item['volumes'].split(','))%}
+                            <option value="{{v['id']}}">{{v['name']}}</option>
+                            {% end %}
+                            {% end %}
+                        </select>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <input class="form-control" id="volume_bind" placeholder="Bind Directory" value="/data" />
+                    </div>
+                    <div class="form-group col-md-4">
+                        <input class="form-control" id="volume_mode" placeholder="Mode (rw | ro)" value="rw" />
+                    </div>
+                    <div class="form-group col-md-4">
+                        <span id="result"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" id="but" onclick="">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% end %}
+
+
+{% block script %}
+<script>
+    $("[name='container_restart_policy']").change(function () {
+        var policy = $(this).find(":selected").val();
+        if (policy=="on-failure"){
+            $("[name='container_on_failure_retry']").prop("disabled", false);
+        }else{
+            $("[name='container_on_failure_retry']").prop("disabled", true);
+        }
+    });
+
+</script>
+
+<script>
+    $("#gitlabs").change(function () {
+        var id = $(this).find(":selected").val();
+        if (id){
+            $.cookie('selected_gitlab', id, { path: '/cicd' });
+            window.location.reload(true);
+        }
+    });
+    $("#projects").change(function () {
+        var id = $(this).find(":selected").val();
+        if (id){
+            $.cookie('selected_project', id, { path: '/cicd' });
+            window.location.reload(true);
+        }
+    });
+</script>
+
+<script>
+    $('#VModal').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget);
+        var modal = $(this);
+        var method = button.data('method');
+        modal.find('#but').attr('onclick', method);
+    });
+
+    function addvolume() { 
+        volume_id=$("#volumes_opts").find(":selected").val();
+        volume_name=$("#volumes_opts").find(":selected").text();
+        if (volume_id){
+            bind=$("#volume_bind").val()
+            mode=$("#volume_mode").val()
+
+            now_vols=$("#volumes").val()
+            if (now_vols){now_vols+","}
+            $("#volumes").val(now_vols+volume_id+"||"+volume_name+"||"+bind+"||"+mode)
+            console.log(now_vols)
+            console.log($("#volumes").val())
+
+            element="<div class='form-group col-md-12'>"
+            // element+="<input hidden name='volumes' value='"+volume_id+"||"+bind+"||"+mode +"' />"
+            element+="<label class='control-label col-md-4' style='font-weight: bold;text-align:center;'>"+volume_name+"</label>"
+            element+="<label class='control-label col-md-4' style='font-weight: bold;text-align:center;'>"+bind+"</label>"
+            element+="<label class='control-label col-md-2' style='font-weight: bold;text-align:center;'>"+mode+"</label>"
+            element+='<a class="btn btn-outline-danger" href="javascript:;" onclick="deletevolume(event,\''+volume_id+'\',\''+volume_name+'\',\''+bind+'\',\''+mode+'\')">Delete</a>'
+            element+="</div>"
+
+            $("#vols").append(element)
+            
+
+            $("#volumes_opts").find(":selected").remove();
+            $("#volumes_opts").prop("selectedIndex", 0).prop("selected",true);
+            $("#volume_bind").val("/data")
+            $("#volume_mode").val("rw")
+            var modal = $("#VModal");
+            modal.modal('toggle');
+        }
+    }
+
+    
+    function deletevolume(e,id,name,bind,mode){
+        $("#volumes_opts").append("<option value='"+id+"'>"+name+"</option>");
+        var arr=$("#volumes").val().split(',')
+        arr = $.grep(arr, function(value) {
+                    return value != id+"||"+bind+"||"+mode;
+                });
+        $("#volumes").val(arr.join(","))
+        $(e.target).parent().remove()
+    }
+</script>
+{% end %}
