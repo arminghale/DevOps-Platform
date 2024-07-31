@@ -557,7 +557,7 @@ class RunImageDockerHandler(BaseHandler):
                 volume_bind:typing.List[dict]=json.loads(r.get("volume_bind"))
                 r.close()
                 vol=next((x for x in volume_bind if x['id'] == v.split("||")[0]), None)
-                volumes_config[vol['name'] if vol['local_path'] else vol['local_path']]={"bind":v.split("||")[1],"mode":v.split("||")[2]}
+                volumes_config[vol['name'] if not vol['local_path'] else vol['local_path']]={"bind":v.split("||")[2],"mode":v.split("||")[3]}
 
             container=docker_client.containers.run(id, environment=env.split(",") if len(env)>0 else None
                                                    , ports=container_ports, network_mode='bridge'
@@ -810,11 +810,11 @@ class DownloadVolumeDockerHandler(BaseHandler):
 
             if not volume["local_path"]:
                 docker_client=docker.from_env()
-                volume=docker_client.volumes.get(id)
+                volume_docker=docker_client.volumes.get(id)
                 image=docker_client.images.pull("busybox","latest")
 
                 volumes_config={}
-                volumes_config[volume.name]={"bind":"/volume","mode":"rw"}
+                volumes_config[volume_docker.name]={"bind":"/volume","mode":"rw"}
                 volumes_config[f"{os.getcwd()}/volume_data"]={"bind":"/volume_data","mode":"rw"}
 
                 container=docker_client.containers.run(image,volumes=volumes_config,detach=True
@@ -1249,10 +1249,10 @@ class RunCICDHandler(BaseHandler):
             selected_gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==cicd['gitlab_id']), None)
 
             gl=GitlabModel(selected_gitlab['token'],selected_gitlab['domain'])  
-            gl.Clone(cicd['project_id'],cicd['branch'],cicd['image_spath'])
-
+            t=gl.Clone(cicd['project_id'],cicd['branch'],cicd['image_spath'])
+            logging.debug(t)
             docker_client=docker.from_env()
-            image=docker_client.images.build(tag=cicd['tag'], path=f"{cicd['image_spath']}{cicd['image_bpath']}", rm=True)[0]
+            image=docker_client.images.build(tag=f"{cicd['image_name']}:{cicd['image_tag']}", path=f"{cicd['image_spath']}{cicd['image_bpath']}", rm=True)[0]
 
             shutil.rmtree(cicd['image_spath'], ignore_errors=True)
 
@@ -1265,10 +1265,10 @@ class RunCICDHandler(BaseHandler):
             if cicd['container_restart_policy']=="on-failure": restart_policy['MaximumRetryCount']=cicd['container_on_failure_retry']
 
             volumes_config={}
-            for v in cicd['volumes']:
+            for v in cicd['volumes'].split(","):
                 volume_bind:typing.List[dict]=json.loads(r.get("volume_bind"))
                 vol=next((x for x in volume_bind if x['id'] == v.split("||")[0]), None)
-                volumes_config[vol['name'] if vol['local_path'] else vol['local_path']]={"bind":v.split("||")[1],"mode":v.split("||")[2]}
+                volumes_config[vol['name'] if not vol['local_path'] else vol['local_path']]={"bind":v.split("||")[2],"mode":v.split("||")[3]}
 
             container=docker_client.containers.run(image, environment=cicd['container_env'].split(",") if len(cicd['container_env'])>0 else None
                                                    , ports=container_ports, network_mode='bridge'
@@ -1374,6 +1374,7 @@ if __name__ == '__main__':
 
     nginx_check=subprocess.Popen([f'nginx -v'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
     if "nginx version".casefold() not in f"{nginx_check.communicate()}".casefold():
+        NGINX=0
         logging.debug("Nginx is not installed")
 
     # If everything is OK run redis and web platform

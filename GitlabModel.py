@@ -67,4 +67,7 @@ class GitlabModel:
             raise
         project =  self.gl.projects.get(projectName)
         git_url = project.http_url_to_repo
-        subprocess.call(['git', 'clone', '--branch', branchName ,'--single-branch', git_url, path])
+        git_proc=subprocess.Popen(['git', 'clone', '--branch', branchName ,'--single-branch', git_url, path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        git_proc.communicate()
+        rm_git_folder=subprocess.Popen(['rm','-rf',f'{path}/.git'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        rm_git_folder.communicate()

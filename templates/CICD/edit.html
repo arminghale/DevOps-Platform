@@ -199,7 +199,7 @@
             mode=$("#volume_mode").val()
 
             now_vols=$("#volumes").val()
-            if (now_vols){now_vols+","}
+            if (now_vols.length>0){now_vols+","}
             $("#volumes").val(now_vols+volume_id+"||"+volume_name+"||"+bind+"||"+mode)
             console.log(now_vols)
             console.log($("#volumes").val())
@@ -229,7 +229,7 @@
         $("#volumes_opts").append("<option value='"+id+"'>"+name+"</option>");
         var arr=$("#volumes").val().split(',')
         arr = $.grep(arr, function(value) {
-                    return value != id+"||"+bind+"||"+mode;
+                    return value != id+"||"+name+"||"+bind+"||"+mode;
                 });
         $("#volumes").val(arr.join(","))
         $(e.target).parent().remove()
