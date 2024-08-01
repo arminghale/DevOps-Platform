@@ -12,7 +12,6 @@ import subprocess
 import sys
 import typing
 import time
-import uuid
 import zipfile
 
 import docker.models
@@ -20,14 +19,14 @@ import docker.models.containers
 import docker
 
 import redis
-import nginx
 
 import tornado.escape
 import tornado.ioloop
 import tornado.web
 
-from GitlabModel import CheckGitlab, GitlabInfo, GitlabModel
-from UserModel import Decode_User, User
+from GitlabModel import GitlabInfo
+from Repository import CICDHandler, DockerHandler, GitHandler, MonitorHandler, NginxHandler, UserHandler
+from UserModel import User
 from CICDModel import CICD
 
 
@@ -48,6 +47,9 @@ class BaseHandler(tornado.web.RequestHandler):
     def get_current_user(self):
         return self.get_signed_cookie("credential")
 
+    def get_token(self):
+        return self.get_signed_cookie("credential").decode("utf-8")
+
     def get_user_access(self):
         if self.get_current_user():
             token=self.get_signed_cookie("credential").decode("utf-8")
@@ -63,18 +65,17 @@ class BaseHandler(tornado.web.RequestHandler):
         return None
 
     def find_user(self,token:str='',username:str='',id:str=''):
-        r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-        users:typing.List[dict]=json.loads(r.get("users"))
-        r.close()
+        _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
         
         if username:
-            user_json=next((x for x in users if x['username'] == username), None)
+            user_json=_userhandler.get_user_by_username(username)
         elif id:
-            user_json=next((x for x in users if x['id'] == id), None)
+            user_json=_userhandler.get_user_by_id(id)
         elif token:
-            user_json=next((x for x in users if x['token'] == token), None)
+            user_json=_userhandler.get_user_by_token(token)
  
-        user:User=Decode_User(user_json)
+        user=_userhandler.decode_user_from_json(user_json)
+        _userhandler.close_redis()
         return user
 
     def get_template_namespace(self):
@@ -152,9 +153,9 @@ class ListUserHandler(BaseHandler):
             
             error=self.get_argument("e","")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            users:typing.List[dict]=json.loads(r.get("users"))
-            r.close()
+            _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            users=_userhandler.get_users()
+            _userhandler.close_redis()
 
             self.render("User/list.html",error=error,items=users,title="Users List")
             return
@@ -173,17 +174,10 @@ class DeleteUserHandler(BaseHandler):
             if not id:
                 self.redirect("/user")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            users:typing.List[dict]=json.loads(r.get("users"))
+            _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _userhandler.delete_user(id)
+            _userhandler.close_redis()
             
-            user=next((x for x in users if x['id'] == id), None)
-            if not user:
-                self.redirect(f"/user?e=user not found")
-
-            users.remove(user)
-            r.set("users",json.dumps(users))
-            r.close()
-
             self.redirect("/user")
         except Exception as e:
             self.redirect(f"/user?e=system error: {e}")
@@ -192,10 +186,12 @@ class CreateUserHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
+            error= self.get_argument("e","")
+
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
             
-            self.render("User/create.html",title="Create User")
+            self.render("User/create.html",error=error,title="Create User")
             return
         except Exception as e:
             self.redirect(f"/user?e=system error: {e}")
@@ -211,56 +207,53 @@ class CreateUserHandler(BaseHandler):
             access_level= self.get_argument("access_level")
 
             if not username or not password:
-                self.render("User/create.html", error="enter username and password",title="Create User")
-                return
+                self.redirect(f"/user/create?e=enter username and password")
             if access_level<0:
-                self.render("User/create.html", error="enter positive number for access level",title="Create User")
-                return
+                self.redirect(f"/user/create?e=enter positive number for access level")
+            
+            _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            users:typing.List[dict]=json.loads(r.get("users"))
+            if _userhandler.get_user_by_username(username=username):
+                self.redirect(f"/user/create?e=user with this username exists")
 
-            if self.find_user(username=username):
-                self.render("User/create.html", error="user with this username exists",title="Create User")
-                return
 
             user=User(username,hashlib.sha256(password.encode("utf-8")).hexdigest(),access_level=access_level)
-
-            users.append(user.json())
-            r.set("users",json.dumps(users))
-            r.close()
+            _userhandler.add_user(user)
+            _userhandler.close_redis()
 
             self.redirect("/user")
         except Exception as e:
-            self.render("User/create.html",error=f"system error: {e}",title="Create User")
+            self.redirect(f"/user/create?e=system error: {e}")
             return
 
 class EditUserHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
+            error= self.get_argument("e","")
+
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
             
             id=self.get_argument("id","")
             if not id:
-                self.redirect("/users")
+                self.redirect("/user")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            users:typing.List[dict]=json.loads(r.get("users"))
-            r.close()
+            _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
 
-            user=next((x for x in users if x['id'] == id), None)
+            user=_userhandler.get_user_by_id(id)
+            _userhandler.close_redis()
             if not user:
-                self.redirect(f"/cicd?e=system error: user not found")
+                self.redirect(f"/user?e=system error: user not found")
 
-            self.render("User/edit.html",item=user,title="Edit User")
+            self.render("User/edit.html",error=error,item=user,title="Edit User")
             return
         except Exception as e:
             self.redirect(f"/user?e=system error: {e}")
     
     @tornado.web.authenticated
     async def post(self) -> None:
+        id= self.get_argument("id")
         try:
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
@@ -268,56 +261,45 @@ class EditUserHandler(BaseHandler):
             username= self.get_argument("username")
             password= self.get_argument("password")
             access_level= self.get_argument("access_level")
-            id= self.get_argument("id")
+           
 
             if not username:
-                self.render("User/edit.html", error="enter username and password",title="Edit User")
-                return
+                self.redirect(f"/user/edit?id={id}&e=enter username")
             if access_level<0:
-                self.render("User/edit.html", error="enter positive number for access level",title="Edit User")
-                return
-            user=self.find_user(id=id)
-            if not user:
-                self.render("User/edit.html", error="user not found",title="Edit User")
-                return
-
-            if self.find_user(username=username).id!=id:
-                self.render("User/edit.html", error="user with this username exists",title="Edit User")
-                return
+                self.redirect(f"/user/edit?id={id}&e=enter positive number for access level")
             
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            users:typing.List[dict]=json.loads(r.get("users"))
+            _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
 
-            users.remove(user.json())
+            user=_userhandler.decode_user_from_json(_userhandler.get_user_by_id(id=id))
+            if not user:
+                self.redirect(f"/user/edit?id={id}&e=user not found")
+
+            if _userhandler.get_user_by_id(username=username)['id']!=id:
+                self.redirect(f"/user/edit?id={id}&e=user with this username exists")
 
             user.username=username
             user.access_level=access_level
             if password:
                 user.password=hashlib.sha256(password.encode("utf-8")).hexdigest()
 
-            users.append(user.json())
-            r.set("users",json.dumps(users))
-            r.close()
+            _userhandler.edit_user(user)
+            _userhandler.close_redis()
 
             self.redirect("/user")
         except Exception as e:
-            self.render("User/edit.html",error=f"system error: {e}",title="Edit User")
-            return
+            self.redirect(f"/user/edit?id={id}&e=system error: {e}")
 
 
 class ListGitlabHandler(BaseHandler):
+
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
             error=self.get_argument("e","")
 
-
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads((r.get("gitlabs")) if (r.get("gitlabs")) else '[]' )
-            r.close()
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            gitlabs=_githanlder.get_gits()
+            _githanlder.close_redis()
 
             self.render("Gitlab/list.html",error=error,items=gitlabs,title="Gitlabs List")
             return
@@ -329,7 +311,8 @@ class CreateGitlabHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            self.render("Gitlab/create.html",title="Create Gitlab")
+            error= self.get_argument("e","")
+            self.render("Gitlab/create.html",error=error,title="Create Gitlab")
             return
         except Exception as e:
             self.redirect(f"/gitlab/credential?e=system error: {e}")
@@ -342,28 +325,20 @@ class CreateGitlabHandler(BaseHandler):
             domain= self.get_argument("domain")
 
             if not token or not domain:
-                self.render("Gitlab/create.html", error="enter token and domain",title="Create Gitlab")
-                return
+                self.redirect(f"/gitlab/credential/create?e=enter token and domain")
             
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads((r.get("gitlabs")) if (r.get("gitlabs")) else '[]')
-
-            try:
-                CheckGitlab(domain,token)
-            except:
-                self.render("Gitlab/create.html",error=f"Can't login with this information",title="Create Gitlab")
-                return
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            
+            if not _githanlder.check_git(domain,token):
+                self.redirect(f"/gitlab/credential/create?e=can't login with this information")
    
             gitlab=GitlabInfo(token,domain,self.get_user_username())
-
-            gitlabs.append(gitlab.json())
-            r.set("gitlabs",json.dumps(gitlabs))
-            r.close()
+            _githanlder.add_git(gitlab)
+            _githanlder.close_redis()
 
             self.redirect("/gitlab/credential")
         except Exception as e:
-            self.render("Gitlab/create.html",error=f"system error: {e}",title="Create Gitlab")
-            return
+            self.redirect(f"/gitlab/credential/create?e=system error: {e}")
 
 class DeleteGitlabHandler(BaseHandler):
     @tornado.web.authenticated
@@ -373,17 +348,10 @@ class DeleteGitlabHandler(BaseHandler):
             if not id:
                 self.redirect("/gitlab/credential")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            
-            gitlab=next((x for x in gitlabs if x['id'] == id), None)
-            if not gitlab:
-                self.redirect("/gitlab/credential?e=gitlab not found")
-                return
 
-            gitlabs.remove(gitlab)
-            r.set("gitlabs",json.dumps(gitlabs))
-            r.close()
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            _githanlder.delete_git(id)
+            _githanlder.close_redis()
 
             self.redirect("/gitlab/credential")
         except Exception as e:
@@ -396,30 +364,21 @@ class ListProjectGitlabHandler(BaseHandler):
             error=self.get_argument("e","")
 
             selected_gitlab=self.get_cookie("selected_gitlab","")
-            gitlab=None
+            selected_project=self.get_argument("pid","")
+            
             projects=[]
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            r.close()
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
 
             if selected_gitlab:
-                gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==selected_gitlab), None)
-            
-                gl=GitlabModel(gitlab['token'],gitlab['domain'])  
-                projects=gl.Projects()
-                for i in range(len(projects)): projects[i]=json.loads(projects[i].to_json())
-                selected_project=self.get_argument("pid","")
                 if selected_project:
-                    project=gl.Project(selected_project)
-                    project=project.to_json()
+                    project=_githanlder.get_project(selected_gitlab,selected_project)
                     self.render("details_json.html",item=project,title="Gitlabs Project")
                     return
-
-            self.render("Gitlab/project_list.html",error=error,items=projects,list=gitlabs, selected_gitlab=selected_gitlab,title="Gitlabs Projects List")
+                
+                projects=_githanlder.get_projects(selected_gitlab)
+            _githanlder.close_redis()
+            self.render("Gitlab/project_list.html",error=error,items=projects,gitlabs=gitlabs,title="Gitlabs Projects List")
             return
         except Exception as e:
             self.render("Gitlab/project_list.html",error=f"system error: {e}",title="Gitlabs Projects List")
@@ -434,37 +393,23 @@ class ListBranchGitlabHandler(BaseHandler):
 
             selected_gitlab=self.get_cookie("selected_gitlab","")
             selected_project=self.get_cookie("selected_project","")
-            gitlab=None
+            selected_branch=self.get_argument("bname","")
+            
             projects=[]
             branches=[]
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            r.close()
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
 
             if selected_gitlab:
-                gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==selected_gitlab), None)
-            
-                gl=GitlabModel(gitlab['token'],gitlab['domain'])  
-                projects=gl.Projects()
-                for i in range(len(projects)): projects[i]=json.loads(projects[i].to_json())
-                
-                if selected_project:
-                    branches=gl.Branches(selected_project)
-                    for i in range(len(branches)): branches[i]=json.loads(branches[i].to_json())
-                    
-                    selected_branch=self.get_argument("bname","")
+                projects=_githanlder.get_projects(selected_gitlab)
+                if selected_project: 
                     if selected_branch:
-                        brnach=gl.Branch(selected_project,selected_branch)
-                        brnach=brnach.to_json()
-                        self.render("details_json.html",item=brnach,title="Gitlabs Project Branch")
+                        branch=_githanlder.get_branch(selected_gitlab,selected_project,selected_branch)
+                        self.render("details_json.html",item=branch,title="Gitlabs Project Branch")
                         return
-
-            self.render("Gitlab/branch_list.html",error=error,items=branches,list=gitlabs, list2=projects
-                        , selected_gitlab=selected_gitlab,selected_project=selected_project,title="Gitlabs Project Branches List")
+                    branches=_githanlder.get_branches(selected_gitlab,selected_project)
+            _githanlder.close_redis()
+            self.render("Gitlab/branch_list.html",error=error,items=branches,gitlabs=gitlabs,projects=projects,title="Gitlabs Project Branches List")
             return
         except Exception as e:
             self.render("Gitlab/branch_list.html",error=f"system error: {e}",title="Gitlabs Project Branches List")
@@ -477,14 +422,9 @@ class ListImageDockerHandler(BaseHandler):
         try:
             error=self.get_argument("e","")
 
-            docker_client=docker.from_env()
-            images=docker_client.images.list()
-            containers=docker_client.containers.list()
-            in_use=[]
-            for i in images:
-                if next((x for x in containers if x.image.tags[0] == i.tags[0]), None):
-                    in_use.append("in use")
-                else: in_use.append("unused")
+            _dockerhandler=DockerHandler()
+            images=_dockerhandler.get_images()
+            in_use=_dockerhandler.get_in_use_images()
 
             self.render("Docker/image_list.html",error=error,items=images,in_use=in_use,title="Docker Image List")
             return
@@ -500,8 +440,8 @@ class DeleteImageDockerHandler(BaseHandler):
             if not id:
                 self.redirect("/docker/image")
 
-            docker_client=docker.from_env()
-            docker_client.images.remove(id)
+            _dockerhandler=DockerHandler()
+            _dockerhandler.delete_image(id)
 
             self.redirect("/docker/image")
         except Exception as e:
@@ -511,16 +451,17 @@ class RunImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
+            error=self.get_argument("e","")
             id=self.get_argument("id","")
             if not id:
                 self.redirect("/docker/image")
-            docker_client=docker.from_env()
-            image=docker_client.images.get(id)
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            volumes:typing.List[dict]=json.loads(r.get("volume_bind"))
-            r.close()
+            
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            image=_dockerhandler.get_image(id)
+            volumes=_dockerhandler.get_volumes()
+            _dockerhandler.close_redis()
 
-            self.render("Docker/run.html",image=image,volumes=volumes,error=self.get_argument("e",""),title="Run Docker Image")
+            self.render("Docker/run.html",error=error,image=image,volumes=volumes,title="Run Docker Image")
             return
         except Exception as e:
             self.redirect(f"/docker/image?e=system error: {e}")
@@ -529,7 +470,6 @@ class RunImageDockerHandler(BaseHandler):
     async def post(self) -> None:
 
         id= self.get_argument("id")
-        docker_client=docker.from_env()
         try:
             
             env=self.get_argument("env")
@@ -538,36 +478,17 @@ class RunImageDockerHandler(BaseHandler):
             ip=self.get_argument("ip","127.0.0.1")
             restart_policy=self.get_argument("restart_policy")
             on_failure_retry=int(self.get_argument("on_failure_retry","1"))
-            volumes=self.get_argument("volumes").split(",")
+            volumes=self.get_argument("volumes","")
 
             if restart_policy!="always" and restart_policy!="on-failure":
                 self.redirect(f"/docker/image/run?id={id}&e=restart policy is invalid")
 
             if ip=="expose":
                 ip=getIP()
-            container_ports: typing.Dict[str, tuple] = {}
-            container_ports[f'{port}/tcp']=(ip,port)
-
-            res_policy={"Name":restart_policy}
-            if restart_policy=="on-failure": res_policy['MaximumRetryCount']=on_failure_retry
-
-            volumes_config={}
-            for v in volumes:
-                r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-                volume_bind:typing.List[dict]=json.loads(r.get("volume_bind"))
-                r.close()
-                vol=next((x for x in volume_bind if x['id'] == v.split("||")[0]), None)
-                volumes_config[vol['name'] if not vol['local_path'] else vol['local_path']]={"bind":v.split("||")[2],"mode":v.split("||")[3]}
-
-            container=docker_client.containers.run(id, environment=env.split(",") if len(env)>0 else None
-                                                   , ports=container_ports, network_mode='bridge'
-                                                   , name= name, detach=True
-                                                   , restart_policy=res_policy
-                                                   , volumes=volumes_config)
             
-            while container.status != 'running':
-                container.reload()
-                time.sleep(0.1)
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _dockerhandler.run_container(id,ip,port,name,restart_policy,on_failure_retry,volumes,env)
+            _dockerhandler.close_redis()
 
             self.redirect("/docker/container")
         except Exception as e:
@@ -577,7 +498,9 @@ class PullImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            self.render("Docker/pull_image.html",title="Pull Docker Image")
+            error=self.get_argument("e","")
+
+            self.render("Docker/pull_image.html",error=error,title="Pull Docker Image")
             return
         except Exception as e:
             self.redirect(f"/docker/image?e=system error: {e}")
@@ -593,27 +516,21 @@ class PullImageDockerHandler(BaseHandler):
             platform = self.get_argument("platform","")
 
             if not repository:
-                self.render("Docker/pull_image.html", error="enter repository",title="Pull Docker Image")
-                return
+                self.redirect(f"/docker/image/pull?e=enter repository")
             
-            auth_config={}
-            if username and password:
-                auth_config={'username':username,'password':password}
-
-            docker_client=docker.from_env()
-            docker_client.images.pull(repository=repository, tag=tag
-                                      , auth_config=auth_config if auth_config else None
-                                      , platform=platform if platform else None)
+            _dockerhandler=DockerHandler()
+            _dockerhandler.pull_image(repository,tag,platform,username,password)
 
             self.redirect("/docker/image")
         except Exception as e:
-            self.render("Docker/pull_image.html",error=f"system error: {e}",title="Pull Docker Image")
-            return
+            self.redirect(f"/docker/image/pull?e=system error: {e}")
 
 class BuildImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
+            error= self.get_argument("e","")
+
             branch= self.get_argument("bname")
             project=self.get_argument("pid")
             gitlab=self.get_argument("gitlab")
@@ -621,7 +538,7 @@ class BuildImageDockerHandler(BaseHandler):
                 self.redirect("/gitlab/branch")
 
             run=self.get_argument("run","0")
-            self.render("Docker/build_image.html",branch=branch,project=project,gitlab=gitlab,run=run,title="Build Docker Image")
+            self.render("Docker/build_image.html",error=error,branch=branch,project=project,gitlab=gitlab,run=run,title="Build Docker Image")
             return
         except Exception as e:
             self.redirect(f"/docker/image?e=system error: {e}")
@@ -639,25 +556,18 @@ class BuildImageDockerHandler(BaseHandler):
             spath= self.get_argument("spath")
             bpath= self.get_argument("bpath")
             tag= self.get_argument("tag")
+            name= self.get_argument("name")
 
-            if not spath or not bpath or not tag or not branch or not project or not gitlab:
+            if not spath or not bpath or not tag or not branch or not project or not gitlab or not name:
                 self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=fill out all entries")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            r.close()
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
-            selected_gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==gitlab), None)
-            if not selected_gitlab:
+            _githanlder=_githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            if not _githanlder.has_access(gitlab):
                 self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=no access to selected gitlab")
+            _githanlder.clone(gitlab,project,branch,spath)
 
-            gl=GitlabModel(selected_gitlab['token'],selected_gitlab['domain'])  
-            gl.Clone(project,branch,spath)
-
-            docker_client=docker.from_env()
-            image=docker_client.images.build(tag=tag, path=f"{spath}{bpath}", rm=True)[0]
+            _dockerhandler=DockerHandler()
+            image=_dockerhandler.build_image(f"{name}:{tag}",f"{spath}{bpath}")
 
             shutil.rmtree(os.rmdir(spath), ignore_errors=True)
 
@@ -674,8 +584,8 @@ class ListContainerDockerHandler(BaseHandler):
         try:
             error=self.get_argument("e","")
 
-            docker_client=docker.from_env()
-            containers=docker_client.containers.list()
+            _dockerhandler=DockerHandler()
+            containers=_dockerhandler.get_containers()
             self.render("Docker/container_list.html",error=error,items=containers,title="Docker Container List")
             return
         except Exception as e:
@@ -690,8 +600,8 @@ class DeleteContainerDockerHandler(BaseHandler):
             if not id:
                 self.redirect("/docker/container")
 
-            docker_client=docker.from_env()
-            docker_client.containers.get(id).remove(force=True)
+            _dockerhandler=DockerHandler()
+            _dockerhandler.delete_container(id)
 
             self.redirect("/docker/container")
         except Exception as e:
@@ -703,17 +613,9 @@ class ListVolumeDockerHandler(BaseHandler):
         try:
             error=self.get_argument("e","")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            volumes:typing.List[dict]=json.loads(r.get("volume_bind"))
-
-            docker_client=docker.from_env()
-            docker_volumes=docker_client.volumes.list()
-            for v in docker_volumes:
-                v_in_r=next((x for x in volumes if x['id']==v.id),None)
-                if not v_in_r:
-                    volumes.append({"id":v.id,'name':v.name,"local_path":"","driver":v.attrs['Driver'],"driver_opts":v.attrs['Options']})
-            r.set("volume_bind",json.dumps(volumes))
-            r.close()
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            volumes=_dockerhandler.get_volumes()
+            _dockerhandler.close_redis()
 
             self.render("Docker/volume_list.html",error=error,items=volumes,title="Docker Volume List")
             return
@@ -725,7 +627,8 @@ class CreateVolumeDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            self.render("Docker/create_volume.html",title="Create Docker Volume")
+            error=self.get_argument("e","")
+            self.render("Docker/create_volume.html",error=error,title="Create Docker Volume")
             return
         except Exception as e:
             self.redirect(f"/docker/volume?e=system error: {e}")
@@ -740,33 +643,23 @@ class CreateVolumeDockerHandler(BaseHandler):
             local_path= self.get_argument("local_path","")
 
             if not name:
-                self.render("Docker/create_volume.html", error="enter name",title="Create Docker Volume")
-                return
+                self.redirect("/docker/volume/create?e=enter name")
             
-            try:
-                driver_opts=json.loads(driver_opts)
-            except:
-                self.render("Docker/create_volume.html", error="driver options not in write format",title="Create Docker Volume")
-                return
+            if driver_opts:
+                try:
+                    driver_opts=json.loads(driver_opts)
+                except:
+                    self.redirect("/docker/volume/create?e=driver options not in write format")
 
             volume={'name':name,"local_path":local_path,"driver":driver,"driver_opts":driver_opts}
-            if not local_path:
-                docker_client=docker.from_env()
-                vol=docker_client.volumes.create(name=name,driver=driver,driver_opts=driver_opts)
-                volume['id']=vol.id
-            else:
-                volume['id']=str(uuid.uuid4())
-            
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            volume_binds:typing.List[dict]=json.loads(r.get("volume_bind"))
-            volume_binds.append(volume)
-            r.set("volume_bind",json.dumps(volume_binds))
-            r.close()
+
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _dockerhandler.add_volume(volume)
+            _dockerhandler.close_redis()
 
             self.redirect("/docker/volume")
         except Exception as e:
-            self.render("Docker/create_volume.html",error=f"system error: {e}",title="Create Docker Volume")
-            return
+            self.redirect(f"/docker/volume/create?e=system error: {e}")
 
 class DeleteVolumeDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -776,20 +669,9 @@ class DeleteVolumeDockerHandler(BaseHandler):
             if not id:
                 self.redirect("/docker/volume")
 
-
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            volumes:typing.List[dict]=json.loads(r.get("volume_bind"))
-            volume=next((x for x in volumes if x['id'] == id), None)
-            if not volume['local_path']:
-                docker_client=docker.from_env()
-                docker_client.volumes.get(id).remove(force=True)
-            else:
-                shutil.rmtree(volume['local_path'], ignore_errors=True)
-
-            volumes.remove(volume)
-            r.set("volume_bind",json.dumps(volumes))
-            r.close()
-            
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _dockerhandler.delete_volume(id)
+            _dockerhandler.close_redis()
 
             self.redirect("/docker/volume")
         except Exception as e:
@@ -803,10 +685,9 @@ class DownloadVolumeDockerHandler(BaseHandler):
             if not id:
                 self.redirect("/docker/volume")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            volumes:typing.List[dict]=json.loads(r.get("volume_bind"))
-            r.close()
-            volume=next((x for x in volumes if x['id'] == id), None)
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            volume=_dockerhandler.get_volume(id)
+            _dockerhandler.close_redis()
 
             if not volume["local_path"]:
                 docker_client=docker.from_env()
@@ -842,7 +723,6 @@ class DownloadVolumeDockerHandler(BaseHandler):
             os.remove(f"{os.getcwd()}/data.zip")
                 
             self.finish()
-
         except Exception as e:
             self.redirect(f"/docker/volume?e=system error: {e}")
 
@@ -853,20 +733,9 @@ class ListMonitorHandler(BaseHandler):
         try:
             error=self.get_argument("e","")
 
-            monitors=list(m.name for m in os.scandir("./monitors") if m.is_dir())
-            
-            docker_client=docker.from_env()
-            containers=docker_client.containers.list()
-            in_use=[]
-            href=[]
-            for m in monitors:
-                if next((x for x in containers if x.name == m), None):
-                    in_use.append("active")
-                    with open(f'./monitor/{m}/setting.json') as f:
-                        href.append(json.loads(f)['ip:port'])
-                else: 
-                    in_use.append("deactivate")
-                    href.append("")
+            _monitorhandler=MonitorHandler()
+            monitors=_monitorhandler.get_monitors()
+            in_use,href=_monitorhandler.get_in_use_href_monitors()
 
             self.render("Monitor/list.html",items=monitors,in_use=in_use,href=href,error=error,title="Monitor List")
             return
@@ -882,9 +751,10 @@ class StartMonitorHandler(BaseHandler):
             if not id:
                 self.redirect("/monitor")
 
-            proc=subprocess.Popen([f'docker','compose','-f',f'./monitors/{id}/docker-compose.yml','up'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+            _monitorhandler=MonitorHandler()
+            result=_monitorhandler.start_monitor(id)
 
-            self.redirect(f"/monitor?e={proc.communicate()}")
+            self.redirect(f"/monitor?e={result}")
         except Exception as e:
             self.redirect(f"/monitor?e=system error: {e}")
 
@@ -896,8 +766,8 @@ class StopMonitorHandler(BaseHandler):
             if not id:
                 self.redirect("/monitor")
 
-            docker_client=docker.from_env()
-            docker_client.containers.get(id).remove(force=True)
+            _monitorhandler=MonitorHandler()
+            _monitorhandler.stop_monitor(id)
 
             self.redirect("/monitor")
         except Exception as e:
@@ -911,21 +781,13 @@ class ListNginxHandler(BaseHandler):
             error=self.get_argument("e","")
             name=self.get_argument("name","")
 
-            nginxs=[]
-            
-            for i in list(m.name for m in os.scandir("/etc/nginx/sites-enabled") if not m.is_dir()):
-                try:
-                    c = nginx.Conf()
-                    c = nginx.loadf(f'/etc/nginx/sites-enabled/{i}')
-                    nginxs.append(i)
-                except: continue
+            _nginxhandler=NginxHandler()
 
-            if name and name in nginxs:
-                c = nginx.Conf()
-                c = nginx.loadf(f'/etc/nginx/sites-enabled/{name}')
-                
-                self.render("details_json.html",item=c.as_dict,title="Nginx Detail")
+            if name:
+                self.render("details_json.html",item=_nginxhandler.get_nginx(name),title="Nginx Detail")
                 return
+            
+            nginxs=_nginxhandler.get_nginxs()
 
             self.render("Nginx/list.html",items=nginxs,error=error,title="Nginx List")
             return
@@ -937,7 +799,9 @@ class CreateNginxHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            self.render("Nginx/create.html",title="Create Nginx")
+            error=self.get_argument("e","")
+
+            self.render("Nginx/create.html",error=error,title="Create Nginx")
             return
         except Exception as e:
             self.redirect(f"/nginx?e=system error: {e}")
@@ -951,28 +815,12 @@ class CreateNginxHandler(BaseHandler):
             local_port= self.get_argument("local_port","80")
             domain= self.get_argument("domain","")
 
-            c = nginx.Conf()
-            s = nginx.Server()
-            for exp in expose_port.split(","):
-                s.add(nginx.Key('listen', exp))
-            if domain:
-                s.add(nginx.Key('server_name',domain))
-            s.add(
-                nginx.Location('/',
-                               nginx.Key('include','proxy_params'),
-                               nginx.Key('proxy_pass',f'http://localhost:{local_port}')
-                               )
-            )
-            c.add(s)
-            nginx.dumpf(c, f'/etc/nginx/sites-enabled/{name}')
-
-            proc_systemctl=subprocess.Popen(['sudo systemctl','restart','nginx'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
-            proc_systemctl.communicate()
+            _nginxhandler=NginxHandler()
+            _nginxhandler.add_nginx(name,expose_port,local_port,domain)
 
             self.redirect("/nginx")
         except Exception as e:
-            self.render("Nginx/create.html",error=f"system error: {e}",title="Create Nginx")
-            return
+            self.redirect(f"/nginx/create?e=system error: {e}")
 
 class DeleteNginxHandler(BaseHandler):
     @tornado.web.authenticated
@@ -982,10 +830,10 @@ class DeleteNginxHandler(BaseHandler):
             if not id:
                 self.redirect("/nginx")
 
-            os.remove(f"/etc/nginx/sites-enabled/{id}")
-            proc=subprocess.Popen(['sudo systemctl','restart','nginx'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+            _nginxhandler=NginxHandler()
+            result=_nginxhandler.delete_nginx(id)
 
-            self.redirect(f"/nginx?e=system error: {proc.communicate()}")
+            self.redirect(f"/nginx?e={result}")
         except Exception as e:
             self.redirect(f"/nginx?e=system error: {e}")
 
@@ -997,15 +845,13 @@ class ListCICDHandler(BaseHandler):
             error=self.get_argument("e","")
             id=self.get_argument("id","")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-            r.close()
+            _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
 
             if id:
-                selected_cicd=next((x for x in cicds if x['id'] == id), None)
-                self.render("details_json.html",item=selected_cicd,title="CI/CD Config")
+                self.render("details_json.html",item=_cicdhandler.get_cicd(id),title="CI/CD Config")
                 return
-
+            cicds=_cicdhandler.get_cicds()
+            _cicdhandler.close_redis()
             self.render("CICD/list.html",error=error,items=cicds,title="CI/CD List")
             return
         except Exception as e:
@@ -1020,16 +866,10 @@ class DeleteCICDHandler(BaseHandler):
             if not id:
                 self.redirect("/cicd")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-            
-            cicd=next((x for x in cicds if x['id'] == id), None)
-            if not cicd:
-                self.redirect(f"/cicd?e=cicd not found")
 
-            cicds.remove(cicd)
-            r.set("cicds",json.dumps(cicds))
-            r.close()
+            _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _cicdhandler.delete_cicd(id)
+            _cicdhandler.close_redis()
 
             self.redirect("/cicd")
         except Exception as e:
@@ -1042,33 +882,24 @@ class CreateCICDHandler(BaseHandler):
             error=self.get_argument("e","")
             selected_gitlab=self.get_cookie("selected_gitlab","")
             selected_project=self.get_cookie("selected_project","")
-            gitlab=None
+
+            gitlabs=[]
             projects=[]
             branches=[]
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
-
+            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            gitlabs=_githandler.get_gits()
             if selected_gitlab:
-                gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==selected_gitlab), None)
-            
-                gl=GitlabModel(gitlab['token'],gitlab['domain'])  
-                projects=gl.Projects()
-                for i in range(len(projects)): projects[i]=json.loads(projects[i].to_json())
-                
+                projects=_githandler.get_projects(selected_gitlab)
                 if selected_project:
-                    branches=gl.Branches(selected_project)
-                    for i in range(len(branches)): branches[i]=json.loads(branches[i].to_json())
+                    branches=_githandler.get_branches(selected_gitlab,selected_project)
+            _githandler.close_redis()
 
-            volumes:typing.List[dict]=json.loads(r.get("volume_bind"))
-            r.close()
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            volumes=_dockerhandler.get_volumes()
+            _dockerhandler.close_redis()
 
-            self.render("CICD/create.html",error=error,volumes=volumes,branches=branches,gitlabs=gitlabs, projects=projects
-                        , selected_gitlab=selected_gitlab,selected_project=selected_project,title="Create CICD")
+            self.render("CICD/create.html",error=error,volumes=volumes,branches=branches,gitlabs=gitlabs,projects=projects,title="Create CICD")
 
             return
         except Exception as e:
@@ -1092,24 +923,20 @@ class CreateCICDHandler(BaseHandler):
             container_restart_policy=self.get_argument("container_restart_policy")
             container_on_failure_retry=int(self.get_argument("container_on_failure_retry","1"))
             volumes=self.get_argument("volumes")
+            
+            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            selected_gitlab=_githandler.get_git(gitlab)
+            selected_project=_githandler.get_project(gitlab,project)
+            _githandler.close_redis()
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            selected_gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==gitlab), None)
-            gl=GitlabModel(selected_gitlab['token'],selected_gitlab['domain'])  
-            selected_project=gl.Project(project)
-            selected_project=json.loads(selected_project.to_json())
-            
             cicd=CICD(name,f"{selected_gitlab['user']}|{selected_gitlab['domain']}",gitlab,selected_project['name'],project,branch
                       ,image_name,image_spath,image_bpath,image_tag
                       ,container_name,container_port,container_ip,container_env,container_restart_policy,container_on_failure_retry
                       ,volumes)
-
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-            cicds.append(cicd.json())
-            r.set("cicds",json.dumps(cicds))
-            r.close()
+            
+            _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _cicdhandler.add_cicd(cicd)
+            _cicdhandler.close_redis()
 
             self.redirect("/cicd")
         except Exception as e:
@@ -1125,42 +952,34 @@ class EditCICDHandler(BaseHandler):
             if not id:
                 self.redirect("/cicd")
 
-            gitlab=None
+
+            _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            cicd=_cicdhandler.get_cicd(id)
+            if not cicd:
+                self.redirect(f"/cicd?e=system error: cicd not found")
+            _cicdhandler.close_redis()
+
+            selected_gitlab=self.get_cookie("selected_gitlab","")
+            selected_project=self.get_cookie("selected_project","")
+
+            gitlabs=[]
             projects=[]
             branches=[]
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-
-            cicd=next((x for x in cicds if x['id'] == id), None)
-            if not cicd:
-                self.redirect(f"/cicd?e=system error: cicd not found")
-
-            selected_gitlab=self.get_cookie("selected_gitlab",cicd['gitlab_id'])
-            selected_project=self.get_cookie("selected_project",cicd['project_id'])
-
-
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
-
+            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            gitlabs=_githandler.get_gits()
             if selected_gitlab:
-                gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==selected_gitlab), None)
-            
-                gl=GitlabModel(gitlab['token'],gitlab['domain'])  
-                projects=gl.Projects()
-                for i in range(len(projects)): projects[i]=json.loads(projects[i].to_json())
-                
+                projects=_githandler.get_projects(selected_gitlab)
                 if selected_project:
-                    branches=gl.Branches(selected_project)
-                    for i in range(len(branches)): branches[i]=json.loads(branches[i].to_json())
+                    branches=_githandler.get_branches(selected_gitlab,selected_project)
+            _githandler.close_redis()
 
-            volumes:typing.List[dict]=json.loads(r.get("volume_bind"))
-            r.close()
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            volumes=_dockerhandler.get_volumes()
+            _dockerhandler.close_redis()
 
-            self.render("CICD/edit.html",error=error,volumes=volumes,branches=branches,gitlabs=gitlabs, projects=projects
-                        , selected_gitlab=selected_gitlab,selected_project=selected_project,item=cicd,title="Edit CICD")
+
+            self.render("CICD/edit.html",error=error,volumes=volumes,branches=branches,gitlabs=gitlabs, projects=projects,item=cicd,title="Edit CICD")
             return
         except Exception as e:
             self.redirect(f"/cicd?e=system error: {e}")
@@ -1186,41 +1005,35 @@ class EditCICDHandler(BaseHandler):
             volumes=self.get_argument("volumes")
             
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
+            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            selected_gitlab=_githandler.get_git(gitlab)
+            selected_project=_githandler.get_project(gitlab,project)
+            _githandler.close_redis()
             
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
-            selected_gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==gitlab), None)
-            gl=GitlabModel(selected_gitlab['token'],selected_gitlab['domain'])  
-            selected_project=gl.Project(project)
-            selected_project=json.loads(selected_project.to_json())
+            _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            cicd=_cicdhandler.get_cicd(id)
 
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-
-            index = next((i for i, item in enumerate(cicds) if item['id'] == id), -1)
-            if index==-1:
-                self.redirect(f"/cicd/edit?e=cicd not found")
-
-            cicds[index]['gitlab']=f"{selected_gitlab['user']}|{selected_gitlab['domain']}"
-            cicds[index]['gitlab_id']=gitlab
-            cicds[index]['project']=selected_project['name']
-            cicds[index]['project_id']=project
-            cicds[index]['branch']=branch
-            cicds[index]['name']=name
-            cicds[index]['image_name']=image_name
-            cicds[index]['image_spath']=image_spath
-            cicds[index]['image_bpath']=image_bpath
-            cicds[index]['image_tag']=image_tag
-            cicds[index]['container_name']=container_name
-            cicds[index]['container_port']=container_port
-            cicds[index]['container_ip']=container_ip
-            cicds[index]['container_env']=container_env
-            cicds[index]['container_restart_policy']=container_restart_policy
-            cicds[index]['container_on_failure_retry']=container_on_failure_retry
-            cicds[index]['volumes']=volumes
-            cicds[index]['update_date']=datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")
-
-            r.set("cicds",json.dumps(cicds))
-            r.close()
+            cicd['gitlab']=f"{selected_gitlab['user']}|{selected_gitlab['domain']}"
+            cicd['gitlab_id']=gitlab
+            cicd['project']=selected_project['name']
+            cicd['project_id']=project
+            cicd['branch']=branch
+            cicd['name']=name
+            cicd['image_name']=image_name
+            cicd['image_spath']=image_spath
+            cicd['image_bpath']=image_bpath
+            cicd['image_tag']=image_tag
+            cicd['container_name']=container_name
+            cicd['container_port']=container_port
+            cicd['container_ip']=container_ip
+            cicd['container_env']=container_env
+            cicd['container_restart_policy']=container_restart_policy
+            cicd['container_on_failure_retry']=container_on_failure_retry
+            cicd['volumes']=volumes
+            cicd['update_date']=datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S")
+            
+            _cicdhandler.edit_cicd(cicd)
+            _cicdhandler.close_redis()
 
             self.redirect("/cicd")
         except Exception as e:
@@ -1234,53 +1047,35 @@ class RunCICDHandler(BaseHandler):
             if not id:
                 self.redirect("/cicd")
 
-            docker_client=docker.from_env()
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-            cicd = next((item for item in cicds if item['id'] == id), None)
+            _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            cicd=_cicdhandler.get_cicd(id)
+            _cicdhandler.close_redis()
             if not cicd:
                 self.redirect(f"/cicd?e=cicd not found")
 
-            gitlabs:typing.List[dict]=json.loads(r.get("gitlabs"))
+            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
+            cicds:typing.List[dict]=json.loads(r.get("cicds"))
+            cicd = next((item for item in cicds if item['id'] == id), None)
+            
+            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            _githandler.clone(cicd['gitlab_id'],cicd['project_id'],cicd['branch'],cicd['image_spath'])
+            _githandler.close_redis()
 
-            if self.get_user_access()<1:
-                user=self.get_user_username()
-                gitlabs=list(filter(lambda x: user==x['user'], gitlabs))
-            selected_gitlab=next((item for  i,item in enumerate(gitlabs) if item['id']==cicd['gitlab_id']), None)
-
-            gl=GitlabModel(selected_gitlab['token'],selected_gitlab['domain'])  
-            t=gl.Clone(cicd['project_id'],cicd['branch'],cicd['image_spath'])
-            logging.debug(t)
-            docker_client=docker.from_env()
-            image=docker_client.images.build(tag=f"{cicd['image_name']}:{cicd['image_tag']}", path=f"{cicd['image_spath']}{cicd['image_bpath']}", rm=True)[0]
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            image=_dockerhandler.build_image(f"{cicd['image_name']}:{cicd['image_tag']}",f"{cicd['image_spath']}{cicd['image_bpath']}")
 
             shutil.rmtree(cicd['image_spath'], ignore_errors=True)
 
             if cicd['container_ip']=="expose":
                 cicd['container_ip']=getIP()
-            container_ports: typing.Dict[str, tuple] = {}
-            container_ports[f"{cicd['container_port']}/tcp"]=(cicd['container_ip'],cicd['container_port'])
 
-            restart_policy={"Name":cicd['container_restart_policy']}
-            if cicd['container_restart_policy']=="on-failure": restart_policy['MaximumRetryCount']=cicd['container_on_failure_retry']
+            container=_dockerhandler.run_container(image.id,cicd['container_ip'],cicd['container_port']
+                                                   ,cicd['container_name'],cicd['container_restart_policy']
+                                                   ,cicd['container_on_failure_retry'],cicd['volumes']
+                                                   ,cicd['container_env'])
 
-            volumes_config={}
-            for v in cicd['volumes'].split(","):
-                volume_bind:typing.List[dict]=json.loads(r.get("volume_bind"))
-                vol=next((x for x in volume_bind if x['id'] == v.split("||")[0]), None)
-                volumes_config[vol['name'] if not vol['local_path'] else vol['local_path']]={"bind":v.split("||")[2],"mode":v.split("||")[3]}
+            _dockerhandler.close_redis()
 
-            container=docker_client.containers.run(image, environment=cicd['container_env'].split(",") if len(cicd['container_env'])>0 else None
-                                                   , ports=container_ports, network_mode='bridge'
-                                                   , name= cicd['container_name'], detach=True
-                                                   , restart_policy=restart_policy
-                                                   , volumes=volumes_config)
-            
-            while container.status != 'running':
-                container.reload()
-                time.sleep(0.1)
-
-            r.close()
             self.redirect(f"/cicd?e=Done!")
         except Exception as e:
             self.redirect(f"/cicd?e=system error: {e}")
@@ -1404,14 +1199,14 @@ if __name__ == '__main__':
 
         r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
         users=r.get("users")
-        volume_bind=r.get("volume_bind")
+        volumes=r.get("volumes")
         cicds=r.get("cicds")
         gitlabs=r.get("gitlabs")
         if not users:
             admin=User("admin",hashlib.sha256(b"ASD%^&123").hexdigest(),access_level=1)
             r.set("users",json.dumps([admin.json()]))
-        if not volume_bind:
-            r.set("volume_bind",json.dumps([]))
+        if not volumes:
+            r.set("volumes",json.dumps([]))
         if not cicds:
             r.set("cicds",json.dumps([]))
         if not gitlabs:

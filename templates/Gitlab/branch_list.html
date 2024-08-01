@@ -6,8 +6,8 @@
         <div class="form-group mx-sm-3 mb-4">
             <select id="gitlabs" type="text" class="form-control">
                 <option value="">choose</option>
-                {% for g in list %}
-                {% if selected_gitlab==g['id']%}
+                {% for g in gitlabs %}
+                {% if handler.get_cookie("selected_gitlab","")==g['id']%}
                 <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
                 {% else %}
                 <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
@@ -18,8 +18,8 @@
         <div class="form-group mx-sm-3 mb-4">
             <select id="projects" type="text" class="form-control">
                 <option value="">choose</option>
-                {% for p in list2 %}
-                {% if selected_project==p['id']%}
+                {% for p in projects %}
+                {% if handler.get_cookie("selected_project","")==p['id']%}
                 <option value="{{p['id']}}" selected>{{p['name']}}</option>
                 {% else %}
                 <option value="{{p['id']}}">{{p['name']}}</option>

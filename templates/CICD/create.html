@@ -6,11 +6,11 @@
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Gitlab</label>
             <select name="gitlab" id="gitlabs" type="text" class="form-control">
-                {% if not selected_gitlab %}
+                {% if not handler.get_cookie("selected_gitlab","") %}
                 <option value="" selected>Choose</option>
                 {% end %}
                 {% for g in gitlabs %}
-                {% if selected_gitlab==g['id']%}
+                {% if handler.get_cookie("selected_gitlab","")==g['id']%}
                 <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
                 {% else %}
                 <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
@@ -21,11 +21,11 @@
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Project</label>
             <select name="project" id="projects" type="text" class="form-control">
-                {% if not selected_project %}
+                {% if not handler.get_cookie("selected_project","") %}
                 <option value="" selected>Choose</option>
                 {% end %}
                 {% for p in projects %}
-                {% if selected_project==p['id']%}
+                {% if handler.get_cookie("selected_project","")==p['id']%}
                 <option value="{{p['id']}}" selected>{{p['name']}}</option>
                 {% else %}
                 <option value="{{p['id']}}">{{p['name']}}</option>

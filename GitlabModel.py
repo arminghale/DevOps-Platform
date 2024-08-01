@@ -7,8 +7,10 @@ def CheckGitlab(token:str,gitlab_url:str='https://gitlab.com'):
     try:
         gitlab.Gitlab(url=gitlab_url, private_token=token)
         # gl.auth()
+        return True
     except Exception as e:
-        raise e
+        return False
+        # raise e
 
 class GitlabInfo:
     def __init__(self,token:str,domain:str,user:str,id:str=''):

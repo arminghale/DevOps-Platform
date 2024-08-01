@@ -24,20 +24,3 @@ class User:
 
     def extend_date(self):
         self.expired_date=(datetime.datetime.strptime(self.expired_date,"%Y-%m-%d, %H:%M:%S")+datetime.timedelta(30)).strftime("%Y-%m-%d, %H:%M:%S")
-
-def Decode_Users(users_json):
-    users:typing.List[User]=[]
-    for item in users_json:
-        users.append(Decode_User(item))
-    return users
-
-def Decode_User(json):
-    return User(
-            json['username'],
-            json['password'],
-            json['token'],
-            json['expired_date'],
-            json['access_level'],
-            json['id']
-        )
-
