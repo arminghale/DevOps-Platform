@@ -1,5 +1,6 @@
 ﻿
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -272,8 +273,8 @@ class MonitorHandler:
         for m in self.get_monitors():
             if next((x for x in containers if x.name == m), None):
                 in_use.append("active")
-                with open(f'./monitor/{m}/setting.json') as f:
-                    href.append(json.loads(f)['ip:port'])
+                with open(f'./monitors/{m}/setting.json','r',encoding="utf-8-sig") as f:
+                    href.append(json.loads(f.read())['ip:port'])
             else: 
                 in_use.append("deactivate")
                 href.append("")
@@ -281,7 +282,7 @@ class MonitorHandler:
         return in_use,href
 
     def start_monitor(self,id:str):
-        proc=subprocess.Popen([f'docker','compose','-f',f'./monitors/{id}/docker-compose.yml','up'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        proc=subprocess.Popen([f'docker','compose','-f',f'./monitors/{id}/docker-compose.yml','up','-d'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
         return proc.communicate()
 
     def stop_monitor(self,id:str):
