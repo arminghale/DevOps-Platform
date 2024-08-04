@@ -365,10 +365,11 @@ class ListProjectGitlabHandler(BaseHandler):
 
             selected_gitlab=self.get_cookie("selected_gitlab","")
             selected_project=self.get_argument("pid","")
-            
+            gitlabs=[]
             projects=[]
 
             _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            gitlabs=_githanlder.get_gits()
 
             if selected_gitlab:
                 if selected_project:
@@ -395,10 +396,12 @@ class ListBranchGitlabHandler(BaseHandler):
             selected_project=self.get_cookie("selected_project","")
             selected_branch=self.get_argument("bname","")
             
+            gitlabs=[]
             projects=[]
             branches=[]
 
             _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            gitlabs=_githanlder.get_gits()
 
             if selected_gitlab:
                 projects=_githanlder.get_projects(selected_gitlab)
@@ -559,11 +562,11 @@ class BuildImageDockerHandler(BaseHandler):
             name= self.get_argument("name")
 
             if not spath or not bpath or not tag or not branch or not project or not gitlab or not name:
-                self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=fill out all entries")
+                self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&e=fill out all entries")
 
             _githanlder=_githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
             if not _githanlder.has_access(gitlab):
-                self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=no access to selected gitlab")
+                self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&e=no access to selected gitlab")
             _githanlder.clone(gitlab,project,branch,spath)
 
             _dockerhandler=DockerHandler()
@@ -576,7 +579,7 @@ class BuildImageDockerHandler(BaseHandler):
 
             self.redirect("/docker/image")
         except Exception as e:
-            self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&error=system error: {e}")
+            self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&e=system error: {e}")
             
 class ListContainerDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -814,11 +817,12 @@ class CreateNginxHandler(BaseHandler):
             expose_port= self.get_argument("expose_port","80")
             local_port= self.get_argument("local_port","80")
             domain= self.get_argument("domain","")
+            policy= self.get_argument("policy","")
 
             _nginxhandler=NginxHandler()
-            _nginxhandler.add_nginx(name,expose_port,local_port,domain)
+            result=_nginxhandler.add_nginx(name,expose_port,local_port,domain,policy)
 
-            self.redirect("/nginx")
+            self.redirect(f"/nginx?e={result}")
         except Exception as e:
             self.redirect(f"/nginx/create?e=system error: {e}")
 

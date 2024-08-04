@@ -147,7 +147,7 @@ class GitHandler:
 class DockerHandler:
     def __init__(self,redis_ip:str='',redis_port:int=-1):
         self.docker=docker.from_env()
-        if not redis_ip and redis_port>0:
+        if redis_ip and redis_port>0:
             self.redis=redis.Redis(host=redis_ip, port=redis_port)
 
     def close_redis(self):
@@ -160,7 +160,7 @@ class DockerHandler:
         return self.docker.images.get(id)
     
     def get_containers(self):
-        return self.docker.containers.list()
+        return self.docker.containers.list(all=True)
 
     def delete_container(self,id:str):
         self.docker.containers.get(id).remove(force=True)
@@ -298,37 +298,43 @@ class NginxHandler:
         nginxs=[]
         for i in list(m.name for m in os.scandir("/etc/nginx/sites-enabled") if not m.is_dir()):
             try:
-                c = self.nginx_conf.loadf(f'/etc/nginx/sites-enabled/{i}')
+                c = nginx.loadf(f'/etc/nginx/sites-enabled/{i}')
                 nginxs.append(i)
             except: continue
         return nginxs
 
     def get_nginx(self,name:str):
         if name and name in self.get_nginxs():
-            c = self.nginx_conf.loadf(f'/etc/nginx/sites-enabled/{name}')
+            c = nginx.loadf(f'/etc/nginx/sites-enabled/{name}')
             return c.as_dict
         return "{}"
 
-    def add_nginx(self,name:str,expose_port:str,local_port:str,domain:str=""):
+    def add_nginx(self,name:str,expose_port:str,local_port:str,domain:str="",policy=""):        
+        self.nginx_upstream=nginx.Upstream(name)
+        if policy: self.nginx_upstream.add(nginx.Key(policy,""))
+        for loc in local_port.split(','):
+            self.nginx_upstream.add(nginx.Key('server',f'localhost:{loc}'))
+ 
         for exp in expose_port.split(","):
             self.nginx_server.add(nginx.Key('listen', exp))
         if domain:
             self.nginx_server.add(nginx.Key('server_name',domain))
-        self.nginx_server.add(
-            nginx.Location('/',
-                            nginx.Key('include','proxy_params'),
-                            nginx.Key('proxy_pass',f'http://localhost:{local_port}')
-                        )
-            )
+        reverse_proxy=nginx.Location('/',nginx.Key('include','proxy_params'))
+        reverse_proxy.add(nginx.Key('proxy_pass',f'http://{name}'))
+        # reverse_proxy.add(nginx.Key('health_check',""))
+        self.nginx_server.add(reverse_proxy)
+
+        self.nginx_conf.add(self.nginx_upstream)
         self.nginx_conf.add(self.nginx_server)
+
         nginx.dumpf(self.nginx_conf, f'/etc/nginx/sites-enabled/{name}')
 
-        proc_systemctl=subprocess.Popen(['sudo systemctl','restart','nginx'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        proc_systemctl=subprocess.Popen('sudo systemctl restart nginx', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
         return proc_systemctl.communicate()
 
     def delete_nginx(self,id:str):
         os.remove(f"/etc/nginx/sites-enabled/{id}")
-        proc=subprocess.Popen(['sudo systemctl','restart','nginx'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        proc=subprocess.Popen('sudo systemctl restart nginx', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
         return proc.communicate()
 
 class CICDHandler:
