@@ -476,7 +476,7 @@ class RunImageDockerHandler(BaseHandler):
         try:
             
             env=self.get_argument("env")
-            port=int(self.get_argument("port"))
+            port=self.get_argument("port")
             name=self.get_argument("name")
             ip=self.get_argument("ip","127.0.0.1")
             restart_policy=self.get_argument("restart_policy")
@@ -921,7 +921,7 @@ class CreateCICDHandler(BaseHandler):
             image_bpath= self.get_argument("image_bpath")
             image_tag= self.get_argument("image_tag")
             container_env=self.get_argument("container_env")
-            container_port=int(self.get_argument("container_port"))
+            container_port=(self.get_argument("container_port"))
             container_name=self.get_argument("container_name")
             container_ip=self.get_argument("container_ip","127.0.0.1")
             container_restart_policy=self.get_argument("container_restart_policy")
@@ -963,8 +963,8 @@ class EditCICDHandler(BaseHandler):
                 self.redirect(f"/cicd?e=system error: cicd not found")
             _cicdhandler.close_redis()
 
-            selected_gitlab=self.get_cookie("selected_gitlab","")
-            selected_project=self.get_cookie("selected_project","")
+            selected_gitlab=self.get_cookie("selected_gitlab",cicd['gitlab_id'])
+            selected_project=self.get_cookie("selected_project",cicd['project_id'])
 
             gitlabs=[]
             projects=[]
@@ -1001,7 +1001,7 @@ class EditCICDHandler(BaseHandler):
             image_bpath= self.get_argument("image_bpath")
             image_tag= self.get_argument("image_tag")
             container_env=self.get_argument("container_env")
-            container_port=int(self.get_argument("container_port"))
+            container_port=(self.get_argument("container_port"))
             container_name=self.get_argument("container_name")
             container_ip=self.get_argument("container_ip","127.0.0.1")
             container_restart_policy=self.get_argument("container_restart_policy")
@@ -1011,7 +1011,7 @@ class EditCICDHandler(BaseHandler):
 
             _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
             selected_gitlab=_githandler.get_git(gitlab)
-            selected_project=_githandler.get_project(gitlab,project)
+            selected_project=json.loads(_githandler.get_project(gitlab,project))
             _githandler.close_redis()
             
             _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
@@ -1041,6 +1041,7 @@ class EditCICDHandler(BaseHandler):
 
             self.redirect("/cicd")
         except Exception as e:
+
             self.redirect(f"/cicd/edit?id={id}&e=system error: {e}")
 
 class RunCICDHandler(BaseHandler):
@@ -1057,10 +1058,6 @@ class RunCICDHandler(BaseHandler):
             if not cicd:
                 self.redirect(f"/cicd?e=cicd not found")
 
-            r=redis.Redis(host=LOCAL_IPADDRESS, port=REDIS_PORT)
-            cicds:typing.List[dict]=json.loads(r.get("cicds"))
-            cicd = next((item for item in cicds if item['id'] == id), None)
-            
             _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
             _githandler.clone(cicd['gitlab_id'],cicd['project_id'],cicd['branch'],cicd['image_spath'])
             _githandler.close_redis()
@@ -1073,7 +1070,7 @@ class RunCICDHandler(BaseHandler):
             if cicd['container_ip']=="expose":
                 cicd['container_ip']=getIP()
 
-            container=_dockerhandler.run_container(image.id,cicd['container_ip'],cicd['container_port']
+            containers=_dockerhandler.run_container(image.id,cicd['container_ip'],cicd['container_port']
                                                    ,cicd['container_name'],cicd['container_restart_policy']
                                                    ,cicd['container_on_failure_retry'],cicd['volumes']
                                                    ,cicd['container_env'])

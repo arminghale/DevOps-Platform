@@ -5,7 +5,7 @@ import uuid
 class CICD:
     def __init__(self,name:str,gitlab:str,gitlab_id:str,project:str,project_id:str,branch:str
                  ,image_name:str,image_spath:str,image_bpath:str,image_tag:str
-                 ,container_name:str,container_port:int,container_ip:str,container_env:str,container_restart_policy:str,container_on_failure_retry:int
+                 ,container_name:str,container_port:str,container_ip:str,container_env:str,container_restart_policy:str,container_on_failure_retry:int
                  ,volumes:str):
         self.id=str(uuid.uuid4())
         self.create_date=datetime.datetime.now()

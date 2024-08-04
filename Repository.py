@@ -1,6 +1,4 @@
-﻿
-import json
-import logging
+﻿import json
 import os
 import shutil
 import subprocess
@@ -233,30 +231,34 @@ class DockerHandler:
         volumes.remove(volume)
         self.redis.set("volumes",json.dumps(volumes))
 
-    def run_container(self,image_id:str,ip:str,port:int,name:str,restart_policy:str,on_failure_retry:int,volumes:str="",env:str=""):
-        container_ports: typing.Dict[str, tuple] = {}
-        container_ports[f'{port}/tcp']=(ip,port)
+    def run_container(self,image_id:str,ip:str,port:str,name:str,restart_policy:str,on_failure_retry:int,volumes:str="",env:str=""):
+        containers=[]
+        inside_port=4583
+        for i,p in enumerate(port.split(",")):
+            container_ports: typing.Dict[str, tuple] = {}
+            container_ports[f'{inside_port}/tcp']=(ip,p)
 
-        res_policy={"Name":restart_policy}
-        if restart_policy=="on-failure": res_policy['MaximumRetryCount']=on_failure_retry
+            res_policy={"Name":restart_policy}
+            if restart_policy=="on-failure": res_policy['MaximumRetryCount']=on_failure_retry
 
-        volumes_config={}
-        if volumes:
-            for v in volumes.split(","):
-                vol=self.get_volume(v.split("||")[0])
-                volumes_config[vol['name'] if not vol['local_path'] else vol['local_path']]={"bind":v.split("||")[2],"mode":v.split("||")[3]}
+            volumes_config={}
+            if volumes:
+                for v in volumes.split(","):
+                    vol=self.get_volume(v.split("||")[0])
+                    volumes_config[vol['name'] if not vol['local_path'] else vol['local_path']]={"bind":v.split("||")[2],"mode":v.split("||")[3]}
 
-        container=self.docker.containers.run(image_id, environment=env.split(",") if len(env)>0 else None
-                                                , ports=container_ports, network_mode='bridge'
-                                                , name= name, detach=True
-                                                , restart_policy=res_policy
-                                                , volumes=volumes_config)
+            container=self.docker.containers.run(image_id, environment=env.split(",") if len(env)>0 else None
+                                                    , ports=container_ports, network_mode='bridge'
+                                                    , name= f"{name}-{i}", detach=True
+                                                    , restart_policy=res_policy
+                                                    , volumes=volumes_config)
+                
+            while container.status != 'running':
+                container.reload()
+                time.sleep(0.1)
             
-        while container.status != 'running':
-            container.reload()
-            time.sleep(0.1)
-        
-        return container
+            containers.append(container)
+        return containers
 
 class MonitorHandler:
     def __init__(self):
