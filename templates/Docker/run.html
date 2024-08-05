@@ -1,7 +1,7 @@
 ﻿{% extends "../base.html" %}
 
 {% block body %}
-<form action="/docker/image/run" method="post">
+<form id="form" action="/docker/image/run" method="post">
     <div class="form-row" id="createform">
         <input name="id" value="{{ image.id }}" hidden/>
         <div class="form-group col-md-4">
@@ -57,10 +57,10 @@
                 <div class="form-row">
                     <div class="form-group col-md-4">
                         <select id="volumes_opts" type="text" class="form-control">
-                            <option value="" selected>Choose</option>
+                            <!-- <option value="" selected>Choose</option>
                             {% for v in volumes %}
                             <option value="{{v['id']}}">{{v['name']}}</option>
-                            {% end %}
+                            {% end %} -->
                         </select>
                     </div>
                     <div class="form-group col-md-4">
@@ -85,22 +85,23 @@
 
 {% block script %}
 <script>
-        $("[name='restart_policy']").change(function () {
-            var policy = $(this).find(":selected").val();
-            if (policy=="on-failure"){
-                $("[name='on_failure_retry']").prop("disabled", false);
-            }else{
-                $("[name='on_failure_retry']").prop("disabled", true);
-            }
-        });
+    $("[name='restart_policy']").change(function () {
+        var policy = $(this).find(":selected").val();
+        if (policy=="on-failure"){
+            $("[name='on_failure_retry']").prop("disabled", false);
+        }else{
+            $("[name='on_failure_retry']").prop("disabled", true);
+        }
+    });
 
 </script>
 <script>
-    $('#VModal').on('show.bs.modal', function (event) {
+    $('#VModal').on('show.bs.modal', async function (event) {
+        await get_volumes()
         var button = $(event.relatedTarget);
         var modal = $(this);
         var method = button.data('method');
-        modal.find('#but').attr('onclick', method);
+        modal.find('#but').attr('onclick', method);        
     });
 
     function addvolume() { 
@@ -135,10 +136,9 @@
             modal.modal('toggle');
         }
     }
-
-    
+  
     function deletevolume(e,id,name,bind,mode){
-        $("#volumes_opts").append("<option value='"+id+"'>"+name+"</option>");
+        // $("#volumes_opts").append("<option value='"+id+"'>"+name+"</option>");
         var arr=$("#volumes").val().split(',')
         arr = $.grep(arr, function(value) {
                     return value != id+"||"+name+"||"+bind+"||"+mode;

@@ -1,10 +1,10 @@
 ﻿{% extends "../base.html" %}
 
 {% block body %}
-<form action="/docker/image/build" method="post">
+<form id="form" action="/docker/image/build" method="post">
     <div class="form-row" id="createform">
-        <input hidden name="bname" value="{{branch}}"/>
-        <input hidden name="pid" value="{{project}}"/>
+        <input hidden name="branch" value="{{branch}}"/>
+        <input hidden name="project" value="{{project}}"/>
         <input hidden name="gitlab" value="{{gitlab}}"/>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Image Name</label>

@@ -31,10 +31,10 @@
                     <td>
                         <div>
                             {% if in_use[i]=="active" %}
-                            <a class="btn btn-danger" href="/monitor/stop?id={{ item}}">Stop</a>
+                            <a class="btn btn-danger" href="/monitor/stop?id={{ item}}" onclick='return a_click()'>Stop</a>
                             <a class="btn btn-success" href="http://{{href[i]}}" target="_blank">Open</a>
                             {% else %}
-                            <a class="btn btn-primary" href="/monitor/start?id={{ item}}">Start</a>
+                            <a class="btn btn-primary" href="/monitor/start?id={{ item}}" onclick='return a_click()'>Start</a>
                             {% end %}
                         </div>
 

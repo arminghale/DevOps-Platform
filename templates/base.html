@@ -20,6 +20,7 @@
 </head>
 
 <body>
+    <div id="overlay"></div>
     <div class="wrapper">
         <!-- Sidebar Holder -->
         <nav id="sidebar">
@@ -148,15 +149,171 @@
                 $(this).toggleClass('active');
             });
         });
-    </script>
-    <script type="text/javascript">
         function action(e, url) {
             var ac = $(e.target).attr('id');
+            $.cookie('action', ac, { path: '/' });
             window.location.href = url;
         }
     </script>
+    
+    <script>
+        function hide_overlay() { 
+            $("#overlay").hide()
+        }
+        function show_overlay() { 
+            $("#overlay").show()
+        }
+    </script>
+    
+    <script>
+        $('#form').submit(function() {
+            show_overlay()
+            return true;
+        });
+        function a_click() {
+            show_overlay()
+            return true
+          }
+    </script>
+    <script>
+        function get_value_from_query(name){
+            var urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        function get_gitlabs(selected=''){
+            return new Promise(function (resolve, reject) {
+                $.ajax({
+                    type: "GET",
+                    url: "/api/gitlab/credential",
+                    data: { }
+                }).done(function (response) {
+                    var result=JSON.parse(response)
+                    set_gitlabs(result,selected)
+                    resolve()
+                })
+            })
+        }
+        function set_gitlabs(result,selected='') {
+            $('#gitlabs').find('option').remove();
+            $('#projects').find('option').remove();
+            $('#branches').find('option').remove();
+
+            var urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.get('gitlab')){selected=urlParams.get('gitlab')}
+
+            var op = $("<option>").html("Choose");
+            op.val('');
+            $('#gitlabs').append(op);
+            for (var i = 0; i < result.length; i++) {
+                var op = $("<option>").html(result[i].user+" | "+result[i].domain);
+                op.val(result[i].id);
+                if(selected&&selected==result[i].id){
+                    op.prop("selected", "selected")
+                }
+                $('#gitlabs').append(op);
+            }
+        }
+
+        function get_projects(gitlab_id,selected='') {
+            return new Promise(function (resolve, reject) {
+                $.ajax({
+                    type: "GET",
+                    url: "/api/gitlab/project",
+                    data: { gitlab:gitlab_id }
+                }).done(function (response) {
+                    var result=JSON.parse(response)
+                    set_projects(result,selected)
+                    resolve()
+                })
+            })
+        }
+        function set_projects(result,selected=''){
+            $('#projects').find('option').remove();
+            $('#branches').find('option').remove();
+
+            var urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.get('project')){selected=urlParams.get('project')}
+
+            var op = $("<option>").html("Choose");
+            op.val('');
+            $('#projects').append(op);
+            for (var i = 0; i < result.length; i++) {
+                var op = $("<option>").html(result[i].name);
+                op.val(result[i].id);
+                if(selected&&selected==result[i].id){
+                    op.prop("selected", "selected")
+                }
+                $('#projects').append(op);
+            }
+        }
+
+        function get_branches(gitlab_id,project_id,selected=''){
+            return new Promise(function (resolve, reject) {
+                $.ajax({
+                    type: "GET",
+                    url: "/api/gitlab/branch",
+                    data: { gitlab:gitlab_id,project:project_id }
+                }).done(function (response) {
+                    var result=JSON.parse(response)
+                    set_branches(result,selected)
+                    resolve() 
+                })
+            })
+        }
+        function set_branches(result,selected=''){
+            $('#branches').find('option').remove();
+            var urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.get('branch')){selected=urlParams.get('branch')}
+
+            var op = $("<option>").html("Choose");
+            op.val('');
+            $('#branches').append(op);
+            for (var i = 0; i < result.length; i++) {
+                var op = $("<option>").html(result[i].name);
+                op.val(result[i].name);
+                if(selected&&selected==result[i].name){
+                    op.prop("selected", "selected")
+                }
+                $('#branches').append(op);
+            }
+        }
+
+        function get_volumes(){
+            return new Promise(function (resolve, reject) {
+                $('#volumes_opts').find('option').remove();
+                $.ajax({
+                    type: "GET",
+                    url: "/api/docker/volume",
+                    data: {  }
+                }).done(function (response) {
+                    var result=JSON.parse(response)
+                    var op = $("<option>").html("Choose");
+                    op.val('');
+                    $('#volumes_opts').append(op);
+                    var arr=$("#volumes").val().split(',')
+                    for (var i = 0; i < result.length; i++) {
+                        is_exists=false
+                        $.each(arr, function( index, value ) {
+                            if(value.split("||")[0] == result[i].id)
+                            is_exists=true
+                        });
+                        if(!is_exists){
+                            var op = $("<option>").html(result[i].name);
+                            op.val(result[i].id);
+                            $('#volumes_opts').append(op);
+                        }
+                    }
+                    resolve()
+                })
+            })
+        }
+    </script>
+
 
     {% block script %}{% end %}
+
+
 
 </body>
 

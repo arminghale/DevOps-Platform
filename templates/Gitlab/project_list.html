@@ -5,14 +5,6 @@
     <form class="form-inline" asp-action="Index">
         <div class="form-group mx-sm-3 mb-4">
             <select id="gitlabs" type="text" class="form-control">
-                <option value="">choose</option>
-                {% for g in gitlabs %}
-                {% if handler.get_cookie("selected_gitlab","")==g['id']%}
-                <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
-                {% else %}
-                <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
-                {% end %}
-                {% end %}
             </select>
         </div>
     </form>
@@ -35,7 +27,7 @@
                     </td>
                     <td>
                         <div>
-                            <a class="btn btn-primary" href="/gitlab/project?pid={{ item['id']}}">Show</a>
+                            <a class="btn btn-primary" href="/gitlab/project?project={{ item['id']}}">Show</a>
                             <a class="btn btn-secondary" target="_blank" href="{{ item['web_url']}}">Open</a>
                         </div>
 
@@ -50,11 +42,15 @@
 
 {% block script %}
 <script>
+    $(window).on('load', async function() {
+        show_overlay()
+        await get_gitlabs()
+        hide_overlay()
+    });
     $("#gitlabs").change(function () {
         var id = $(this).find(":selected").val();
         if (id){
-            $.cookie('selected_gitlab', id, { path: '/gitlab/project' });
-            window.location.reload();
+            window.location.replace(window.location.pathname+"?gitlab=" + id);
         }
     });
 </script>

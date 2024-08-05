@@ -1,49 +1,22 @@
 ﻿{% extends "../base.html" %}
 
 {% block body %}
-<form action="/cicd/edit" method="post">
+<form id="form" action="/cicd/edit" method="post">
     <div class="form-row" id="createform">
         <input name="id" value="{{item['id']}}" hidden/>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Gitlab</label>
             <select name="gitlab" id="gitlabs" type="text" class="form-control">
-                {% if not handler.get_cookie("selected_gitlab",item['gitlab_id']) %}
-                <option value="" selected>Choose</option>
-                {% end %}
-                {% for g in gitlabs %}
-                {% if handler.get_cookie("selected_gitlab",item['gitlab_id'])==g['id']%}
-                <option value="{{g['id']}}" selected>{{g['user']}} | {{g['domain']}}</option>
-                {% else %}
-                <option value="{{g['id']}}">{{g['user']}} | {{g['domain']}}</option>
-                {% end %}
-                {% end %}            
             </select>
         </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Project</label>
             <select name="project" id="projects" type="text" class="form-control">
-                {% if not handler.get_cookie("selected_project",item['project_id']) %}
-                <option value="" selected>Choose</option>
-                {% end %}
-                {% for p in projects %}
-                {% if handler.get_cookie("selected_project",item['project_id'])==p['id']%}
-                <option value="{{p['id']}}" selected>{{p['name']}}</option>
-                {% else %}
-                <option value="{{p['id']}}">{{p['name']}}</option>
-                {% end %}
-                {% end %}            
             </select>
         </div>
         <div class="form-group col-md-4">
             <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Branch</label>
-            <select name="branch" type="text" class="form-control">
-                {% for b in branches %}
-                {% if handler.get_cookie("selected_gitlab",item['gitlab_id'])==item['gitlab_id'] and handler.get_cookie("selected_project",item['project_id'])==item['project_id'] and item['branch']==b['name']%}
-                <option value="{{b['name']}}" selected>{{b['name']}}</option>
-                {% else %}
-                <option value="{{b['name']}}">{{b['name']}}</option>
-                {% end %}
-                {% end %}            
+            <select name="branch" id="branches" type="text" class="form-control">
             </select>
         </div>
         <div class="form-group col-md-6">
@@ -131,12 +104,6 @@
                 <div class="form-row">
                     <div class="form-group col-md-4">
                         <select id="volumes_opts" type="text" class="form-control">
-                            <option value="" selected>Choose</option>
-                            {% for v in volumes %}
-                            {% if not any(v['id']==x.split('||')[0] for x in item['volumes'].split(','))%}
-                            <option value="{{v['id']}}">{{v['name']}}</option>
-                            {% end %}
-                            {% end %}
                         </select>
                     </div>
                     <div class="form-group col-md-4">
@@ -173,19 +140,29 @@
 </script>
 
 <script>
-    $("#gitlabs").change(function () {
-        var id = $(this).find(":selected").val();
-        if (id){
-            $.cookie('selected_gitlab', id, { path: '/cicd' });
-            window.location.reload(true);
-        }
+    $(document).ready(async function () {
+        show_overlay()
+        await get_gitlabs('{{item["gitlab_id"]}}')
+        await get_projects('{{item["gitlab_id"]}}','{{item["project_id"]}}')
+        await get_branches('{{item["gitlab_id"]}}','{{item["project_id"]}}','{{item["branch"]}}')
+        hide_overlay()
     });
-    $("#projects").change(function () {
+    $("#gitlabs").change(async function () {
+        show_overlay()
         var id = $(this).find(":selected").val();
-        if (id){
-            $.cookie('selected_project', id, { path: '/cicd' });
-            window.location.reload(true);
+        if(id){
+            await get_projects(id)
+        } 
+        hide_overlay()
+    });
+    $("#projects").change(async function () {
+        show_overlay()
+        var id = $(this).find(":selected").val();
+        var gitlab_id = $("#gitlabs").find(":selected").val();
+        if(id&&gitlab_id){
+            await get_branches(gitlab_id,id)
         }
+        hide_overlay()
     });
 </script>
 
@@ -195,6 +172,8 @@
         var modal = $(this);
         var method = button.data('method');
         modal.find('#but').attr('onclick', method);
+
+        get_volumes()
     });
 
     function addvolume() { 
@@ -230,9 +209,7 @@
         }
     }
 
-    
     function deletevolume(e,id,name,bind,mode){
-        $("#volumes_opts").append("<option value='"+id+"'>"+name+"</option>");
         var arr=$("#volumes").val().split(',')
         arr = $.grep(arr, function(value) {
                     return value != id+"||"+name+"||"+bind+"||"+mode;

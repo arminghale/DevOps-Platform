@@ -82,7 +82,7 @@ class BaseHandler(tornado.web.RequestHandler):
         namespace = super(BaseHandler, self).get_template_namespace()
         namespace.update({
             'access_level': self.get_user_access(),
-            'error': '',
+            'error': self.get_argument("e",""),
             'title':"Home",
             'items':[],
             'item':'',
@@ -90,21 +90,24 @@ class BaseHandler(tornado.web.RequestHandler):
         })
         return namespace
 
+    def get_uri_without_error(self):
+        uri=self.request.uri
+        uri_splitted=uri.split("&e=")
+        result=uri_splitted[0]
+        if len(uri_splitted)>1:
+            result=result+"&"+'&'.join(uri_splitted[1].split("&")[1:])
+            
+        return result
+
 
 class HomeHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-            if error:
-                self.render("home.html",error=error)
-                return
-            
             self.render("home.html")
             return
         except Exception as e:
-            self.render("home.html",error=f"system error: {e}")
-            return
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class LoginHandler(BaseHandler):
     async def get(self) -> None:
@@ -151,17 +154,14 @@ class ListUserHandler(BaseHandler):
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
             
-            error=self.get_argument("e","")
-
             _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
             users=_userhandler.get_users()
             _userhandler.close_redis()
 
-            self.render("User/list.html",error=error,items=users,title="Users List")
+            self.render("User/list.html",items=users,title="Users List")
             return
         except Exception as e:
-            self.render("User/list.html",error=f"system error: {e}",title="Users List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class DeleteUserHandler(BaseHandler):
     @tornado.web.authenticated
@@ -186,12 +186,10 @@ class CreateUserHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error= self.get_argument("e","")
-
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
             
-            self.render("User/create.html",error=error,title="Create User")
+            self.render("User/create.html",title="Create User")
             return
         except Exception as e:
             self.redirect(f"/user?e=system error: {e}")
@@ -207,14 +205,14 @@ class CreateUserHandler(BaseHandler):
             access_level= self.get_argument("access_level")
 
             if not username or not password:
-                self.redirect(f"/user/create?e=enter username and password")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter username and password")
             if access_level<0:
-                self.redirect(f"/user/create?e=enter positive number for access level")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter positive number for access level")
             
             _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
 
             if _userhandler.get_user_by_username(username=username):
-                self.redirect(f"/user/create?e=user with this username exists")
+                self.redirect(f"{self.get_uri_without_error()}&e=user with this username exists")
 
 
             user=User(username,hashlib.sha256(password.encode("utf-8")).hexdigest(),access_level=access_level)
@@ -223,15 +221,12 @@ class CreateUserHandler(BaseHandler):
 
             self.redirect("/user")
         except Exception as e:
-            self.redirect(f"/user/create?e=system error: {e}")
-            return
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class EditUserHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error= self.get_argument("e","")
-
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
             
@@ -246,36 +241,36 @@ class EditUserHandler(BaseHandler):
             if not user:
                 self.redirect(f"/user?e=system error: user not found")
 
-            self.render("User/edit.html",error=error,item=user,title="Edit User")
+            self.render("User/edit.html",item=user,title="Edit User")
             return
         except Exception as e:
             self.redirect(f"/user?e=system error: {e}")
     
     @tornado.web.authenticated
     async def post(self) -> None:
-        id= self.get_argument("id")
         try:
             if self.get_user_access()<1:
                 self.redirect(f"/?e=no access")
             
+            id= self.get_argument("id")
             username= self.get_argument("username")
             password= self.get_argument("password")
             access_level= self.get_argument("access_level")
            
 
             if not username:
-                self.redirect(f"/user/edit?id={id}&e=enter username")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter username")
             if access_level<0:
-                self.redirect(f"/user/edit?id={id}&e=enter positive number for access level")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter positive number for access level")
             
             _userhandler=UserHandler(LOCAL_IPADDRESS,REDIS_PORT)
 
             user=_userhandler.decode_user_from_json(_userhandler.get_user_by_id(id=id))
             if not user:
-                self.redirect(f"/user/edit?id={id}&e=user not found")
+                self.redirect(f"{self.get_uri_without_error()}&e=user not found")
 
             if _userhandler.get_user_by_id(username=username)['id']!=id:
-                self.redirect(f"/user/edit?id={id}&e=user with this username exists")
+                self.redirect(f"{self.get_uri_without_error()}&e=user with this username exists")
 
             user.username=username
             user.access_level=access_level
@@ -287,32 +282,27 @@ class EditUserHandler(BaseHandler):
 
             self.redirect("/user")
         except Exception as e:
-            self.redirect(f"/user/edit?id={id}&e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 
 class ListGitlabHandler(BaseHandler):
-
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
             _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
             gitlabs=_githanlder.get_gits()
             _githanlder.close_redis()
 
-            self.render("Gitlab/list.html",error=error,items=gitlabs,title="Gitlabs List")
+            self.render("Gitlab/list.html",items=gitlabs,title="Gitlabs List")
             return
         except Exception as e:
-            self.render("Gitlab/list.html",error=f"system error: {e}",title="Gitlabs List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class CreateGitlabHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error= self.get_argument("e","")
-            self.render("Gitlab/create.html",error=error,title="Create Gitlab")
+            self.render("Gitlab/create.html",title="Create Gitlab")
             return
         except Exception as e:
             self.redirect(f"/gitlab/credential?e=system error: {e}")
@@ -325,12 +315,12 @@ class CreateGitlabHandler(BaseHandler):
             domain= self.get_argument("domain")
 
             if not token or not domain:
-                self.redirect(f"/gitlab/credential/create?e=enter token and domain")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter token and domain")
             
             _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
             
             if not _githanlder.check_git(domain,token):
-                self.redirect(f"/gitlab/credential/create?e=can't login with this information")
+                self.redirect(f"{self.get_uri_without_error()}&e=can't login with this information")
    
             gitlab=GitlabInfo(token,domain,self.get_user_username())
             _githanlder.add_git(gitlab)
@@ -338,7 +328,7 @@ class CreateGitlabHandler(BaseHandler):
 
             self.redirect("/gitlab/credential")
         except Exception as e:
-            self.redirect(f"/gitlab/credential/create?e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class DeleteGitlabHandler(BaseHandler):
     @tornado.web.authenticated
@@ -361,15 +351,11 @@ class ListProjectGitlabHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
-            selected_gitlab=self.get_cookie("selected_gitlab","")
-            selected_project=self.get_argument("pid","")
-            gitlabs=[]
+            selected_gitlab=self.get_argument("gitlab","")
+            selected_project=self.get_argument("project","")
             projects=[]
 
             _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
-            gitlabs=_githanlder.get_gits()
 
             if selected_gitlab:
                 if selected_project:
@@ -379,32 +365,24 @@ class ListProjectGitlabHandler(BaseHandler):
                 
                 projects=_githanlder.get_projects(selected_gitlab)
             _githanlder.close_redis()
-            self.render("Gitlab/project_list.html",error=error,items=projects,gitlabs=gitlabs,title="Gitlabs Projects List")
+            self.render("Gitlab/project_list.html",items=projects,title="Gitlabs Projects List")
             return
         except Exception as e:
-            self.render("Gitlab/project_list.html",error=f"system error: {e}",title="Gitlabs Projects List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class ListBranchGitlabHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
-
-            selected_gitlab=self.get_cookie("selected_gitlab","")
-            selected_project=self.get_cookie("selected_project","")
-            selected_branch=self.get_argument("bname","")
+            selected_gitlab=self.get_argument("gitlab","")
+            selected_project=self.get_argument("project","")
+            selected_branch=self.get_argument("branch","")
             
-            gitlabs=[]
-            projects=[]
             branches=[]
 
             _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
-            gitlabs=_githanlder.get_gits()
 
             if selected_gitlab:
-                projects=_githanlder.get_projects(selected_gitlab)
                 if selected_project: 
                     if selected_branch:
                         branch=_githanlder.get_branch(selected_gitlab,selected_project,selected_branch)
@@ -412,28 +390,77 @@ class ListBranchGitlabHandler(BaseHandler):
                         return
                     branches=_githanlder.get_branches(selected_gitlab,selected_project)
             _githanlder.close_redis()
-            self.render("Gitlab/branch_list.html",error=error,items=branches,gitlabs=gitlabs,projects=projects,title="Gitlabs Project Branches List")
+            self.render("Gitlab/branch_list.html",items=branches,title="Gitlabs Project Branches List")
             return
         except Exception as e:
-            self.render("Gitlab/branch_list.html",error=f"system error: {e}",title="Gitlabs Project Branches List")
-            return
+            self.redirect(f"/&e=system error: {e}")
+
+class ListGitlabAPIHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            gitlabs=_githanlder.get_gits()
+            _githanlder.close_redis()
+
+            self.write(json.dumps(gitlabs))
+            self.finish()
+        except Exception as e:
+            self.set_status(500)
+            self.write(f"system error: {e}")
+            self.finish()
+
+class ListProjectGitlabAPIHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            selected_gitlab=self.get_argument("gitlab")
+            projects=[]
+
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            projects=_githanlder.get_projects(selected_gitlab)
+            _githanlder.close_redis()
+
+            self.write(json.dumps(projects))
+            self.finish()
+        except Exception as e:
+            self.set_status(500)
+            self.write(f"system error: {e}")
+            self.finish()
+
+class ListBranchGitlabAPIHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            selected_gitlab=self.get_argument("gitlab")
+            selected_project=self.get_argument("project")
+
+            branches=[]
+
+            _githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
+            branches=_githanlder.get_branches(selected_gitlab,selected_project)
+            _githanlder.close_redis()
+
+            self.write(json.dumps(branches))
+            self.finish()
+        except Exception as e:
+            self.set_status(500)
+            self.write(f"system error: {e}")
+            self.finish()
 
 
 class ListImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
             _dockerhandler=DockerHandler()
             images=_dockerhandler.get_images()
             in_use=_dockerhandler.get_in_use_images()
 
-            self.render("Docker/image_list.html",error=error,items=images,in_use=in_use,title="Docker Image List")
+            self.render("Docker/image_list.html",items=images,in_use=in_use,title="Docker Image List")
             return
         except Exception as e:
-            self.render("Docker/image_list.html",error=f"system error: {e}",title="Docker Image List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class DeleteImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -454,27 +481,23 @@ class RunImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
             id=self.get_argument("id","")
             if not id:
                 self.redirect("/docker/image")
             
-            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            _dockerhandler=DockerHandler()
             image=_dockerhandler.get_image(id)
-            volumes=_dockerhandler.get_volumes()
             _dockerhandler.close_redis()
 
-            self.render("Docker/run.html",error=error,image=image,volumes=volumes,title="Run Docker Image")
+            self.render("Docker/run.html",image=image,title="Run Docker Image")
             return
         except Exception as e:
             self.redirect(f"/docker/image?e=system error: {e}")
 
     @tornado.web.authenticated
     async def post(self) -> None:
-
-        id= self.get_argument("id")
         try:
-            
+            id= self.get_argument("id")
             env=self.get_argument("env")
             port=self.get_argument("port")
             name=self.get_argument("name")
@@ -484,7 +507,7 @@ class RunImageDockerHandler(BaseHandler):
             volumes=self.get_argument("volumes","")
 
             if restart_policy!="always" and restart_policy!="on-failure":
-                self.redirect(f"/docker/image/run?id={id}&e=restart policy is invalid")
+                self.redirect(f"{self.get_uri_without_error()}&e=restart policy is invalid")
 
             if ip=="expose":
                 ip=getIP()
@@ -495,15 +518,13 @@ class RunImageDockerHandler(BaseHandler):
 
             self.redirect("/docker/container")
         except Exception as e:
-            self.redirect(f"/docker/image/run?id={id}&e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class PullImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
-            self.render("Docker/pull_image.html",error=error,title="Pull Docker Image")
+            self.render("Docker/pull_image.html",title="Pull Docker Image")
             return
         except Exception as e:
             self.redirect(f"/docker/image?e=system error: {e}")
@@ -519,54 +540,49 @@ class PullImageDockerHandler(BaseHandler):
             platform = self.get_argument("platform","")
 
             if not repository:
-                self.redirect(f"/docker/image/pull?e=enter repository")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter repository")
             
             _dockerhandler=DockerHandler()
             _dockerhandler.pull_image(repository,tag,platform,username,password)
 
             self.redirect("/docker/image")
         except Exception as e:
-            self.redirect(f"/docker/image/pull?e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class BuildImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error= self.get_argument("e","")
-
-            branch= self.get_argument("bname")
-            project=self.get_argument("pid")
+            branch= self.get_argument("branch")
+            project=self.get_argument("project")
             gitlab=self.get_argument("gitlab")
             if not branch or not project or not gitlab:
                 self.redirect("/gitlab/branch")
 
             run=self.get_argument("run","0")
-            self.render("Docker/build_image.html",error=error,branch=branch,project=project,gitlab=gitlab,run=run,title="Build Docker Image")
+            self.render("Docker/build_image.html",branch=branch,project=project,gitlab=gitlab,run=run,title="Build Docker Image")
             return
         except Exception as e:
             self.redirect(f"/docker/image?e=system error: {e}")
 
     @tornado.web.authenticated
     async def post(self) -> None:
-
-        branch= self.get_argument("bname")
-        project=self.get_argument("pid")
-        run=int(self.get_argument("run","0"))
-        gitlab=self.get_argument("gitlab")
-
         try:
-            
+            branch= self.get_argument("brnach")
+            project=self.get_argument("project")
+            run=int(self.get_argument("run","0"))
+            gitlab=self.get_argument("gitlab")
             spath= self.get_argument("spath")
             bpath= self.get_argument("bpath")
             tag= self.get_argument("tag")
             name= self.get_argument("name")
 
             if not spath or not bpath or not tag or not branch or not project or not gitlab or not name:
-                self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&e=fill out all entries")
+                self.redirect(f"{self.get_uri_without_error()}&e=fill out all entries")
 
             _githanlder=_githanlder=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
             if not _githanlder.has_access(gitlab):
-                self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&e=no access to selected gitlab")
+                self.redirect(f"{self.get_uri_without_error()}&e=no access to selected gitlab")
             _githanlder.clone(gitlab,project,branch,spath)
 
             _dockerhandler=DockerHandler()
@@ -579,21 +595,18 @@ class BuildImageDockerHandler(BaseHandler):
 
             self.redirect("/docker/image")
         except Exception as e:
-            self.redirect(f"/docker/image/build?bname={branch}&pid={project}&gitlab={gitlab}&e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
             
 class ListContainerDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
             _dockerhandler=DockerHandler()
             containers=_dockerhandler.get_containers()
-            self.render("Docker/container_list.html",error=error,items=containers,title="Docker Container List")
+            self.render("Docker/container_list.html",items=containers,title="Docker Container List")
             return
         except Exception as e:
-            self.render("Docker/container_list.html",error=f"system error: {e}",title="Docker Container List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class DeleteContainerDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -614,24 +627,20 @@ class ListVolumeDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
             _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
             volumes=_dockerhandler.get_volumes()
             _dockerhandler.close_redis()
 
-            self.render("Docker/volume_list.html",error=error,items=volumes,title="Docker Volume List")
+            self.render("Docker/volume_list.html",items=volumes,title="Docker Volume List")
             return
         except Exception as e:
-            self.render("Docker/volume_list.html",error=f"system error: {e}",title="Docker Volume List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class CreateVolumeDockerHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-            self.render("Docker/create_volume.html",error=error,title="Create Docker Volume")
+            self.render("Docker/create_volume.html",title="Create Docker Volume")
             return
         except Exception as e:
             self.redirect(f"/docker/volume?e=system error: {e}")
@@ -646,13 +655,13 @@ class CreateVolumeDockerHandler(BaseHandler):
             local_path= self.get_argument("local_path","")
 
             if not name:
-                self.redirect("/docker/volume/create?e=enter name")
+                self.redirect(f"{self.get_uri_without_error()}&e=enter name")
             
             if driver_opts:
                 try:
                     driver_opts=json.loads(driver_opts)
                 except:
-                    self.redirect("/docker/volume/create?e=driver options not in write format")
+                    self.redirect(f"{self.get_uri_without_error()}&e=driver options not in write format")
 
             volume={'name':name,"local_path":local_path,"driver":driver,"driver_opts":driver_opts}
 
@@ -662,7 +671,7 @@ class CreateVolumeDockerHandler(BaseHandler):
 
             self.redirect("/docker/volume")
         except Exception as e:
-            self.redirect(f"/docker/volume/create?e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class DeleteVolumeDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -729,22 +738,34 @@ class DownloadVolumeDockerHandler(BaseHandler):
         except Exception as e:
             self.redirect(f"/docker/volume?e=system error: {e}")
 
+class ListVolumeDockerAPIHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
+            volumes=_dockerhandler.get_volumes()
+            _dockerhandler.close_redis()
+
+            self.write(json.dumps(volumes))
+            self.finish()
+        except Exception as e:
+            self.set_status(500)
+            self.write(f"system error: {e}")
+            self.finish()
+
 
 class ListMonitorHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
             _monitorhandler=MonitorHandler()
             monitors=_monitorhandler.get_monitors()
             in_use,href=_monitorhandler.get_in_use_href_monitors()
 
-            self.render("Monitor/list.html",items=monitors,in_use=in_use,href=href,error=error,title="Monitor List")
+            self.render("Monitor/list.html",items=monitors,in_use=in_use,href=href,title="Monitor List")
             return
         except Exception as e:
-            self.render("Monitor/list.html",error=f"system error: {e}",title="Monitor List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class StartMonitorHandler(BaseHandler):
     @tornado.web.authenticated
@@ -781,7 +802,6 @@ class ListNginxHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
             name=self.get_argument("name","")
 
             _nginxhandler=NginxHandler()
@@ -792,19 +812,16 @@ class ListNginxHandler(BaseHandler):
             
             nginxs=_nginxhandler.get_nginxs()
 
-            self.render("Nginx/list.html",items=nginxs,error=error,title="Nginx List")
+            self.render("Nginx/list.html",items=nginxs,title="Nginx List")
             return
         except Exception as e:
-            self.render("Nginx/list.html",error=f"system error: {e}",title="Nginx List")
-            return
+            self.redirect(f"/&e=system error: {e}")
 
 class CreateNginxHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-
-            self.render("Nginx/create.html",error=error,title="Create Nginx")
+            self.render("Nginx/create.html",title="Create Nginx")
             return
         except Exception as e:
             self.redirect(f"/nginx?e=system error: {e}")
@@ -824,7 +841,7 @@ class CreateNginxHandler(BaseHandler):
 
             self.redirect(f"/nginx?e={result}")
         except Exception as e:
-            self.redirect(f"/nginx/create?e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class DeleteNginxHandler(BaseHandler):
     @tornado.web.authenticated
@@ -846,7 +863,6 @@ class ListCICDHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
             id=self.get_argument("id","")
 
             _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
@@ -856,11 +872,10 @@ class ListCICDHandler(BaseHandler):
                 return
             cicds=_cicdhandler.get_cicds()
             _cicdhandler.close_redis()
-            self.render("CICD/list.html",error=error,items=cicds,title="CI/CD List")
+            self.render("CICD/list.html",items=cicds,title="CI/CD List")
             return
         except Exception as e:
-            self.render("CICD/list.html",error=f"system error: {e}",title="CI/CD List")
-            return
+            self.redirect(f"/?e=system error: {e}")
 
 class DeleteCICDHandler(BaseHandler):
     @tornado.web.authenticated
@@ -883,28 +898,8 @@ class CreateCICDHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
-            error=self.get_argument("e","")
-            selected_gitlab=self.get_cookie("selected_gitlab","")
-            selected_project=self.get_cookie("selected_project","")
 
-            gitlabs=[]
-            projects=[]
-            branches=[]
-
-            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
-            gitlabs=_githandler.get_gits()
-            if selected_gitlab:
-                projects=_githandler.get_projects(selected_gitlab)
-                if selected_project:
-                    branches=_githandler.get_branches(selected_gitlab,selected_project)
-            _githandler.close_redis()
-
-            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
-            volumes=_dockerhandler.get_volumes()
-            _dockerhandler.close_redis()
-
-            self.render("CICD/create.html",error=error,volumes=volumes,branches=branches,gitlabs=gitlabs,projects=projects,title="Create CICD")
-
+            self.render("CICD/create.html",title="Create CICD")
             return
         except Exception as e:
             self.redirect(f"/cicd?e=system error: {e}")
@@ -944,18 +939,16 @@ class CreateCICDHandler(BaseHandler):
 
             self.redirect("/cicd")
         except Exception as e:
-            self.redirect(f"/cicd/create?e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class EditCICDHandler(BaseHandler):
     @tornado.web.authenticated
     async def get(self) -> None:
         try:
             
-            error=self.get_argument("e","")
             id=self.get_argument("id","")
             if not id:
                 self.redirect("/cicd")
-
 
             _cicdhandler=CICDHandler(LOCAL_IPADDRESS,REDIS_PORT)
             cicd=_cicdhandler.get_cicd(id)
@@ -963,35 +956,15 @@ class EditCICDHandler(BaseHandler):
                 self.redirect(f"/cicd?e=system error: cicd not found")
             _cicdhandler.close_redis()
 
-            selected_gitlab=self.get_cookie("selected_gitlab",cicd['gitlab_id'])
-            selected_project=self.get_cookie("selected_project",cicd['project_id'])
-
-            gitlabs=[]
-            projects=[]
-            branches=[]
-
-            _githandler=GitHandler(LOCAL_IPADDRESS,REDIS_PORT,self.get_token())
-            gitlabs=_githandler.get_gits()
-            if selected_gitlab:
-                projects=_githandler.get_projects(selected_gitlab)
-                if selected_project:
-                    branches=_githandler.get_branches(selected_gitlab,selected_project)
-            _githandler.close_redis()
-
-            _dockerhandler=DockerHandler(LOCAL_IPADDRESS,REDIS_PORT)
-            volumes=_dockerhandler.get_volumes()
-            _dockerhandler.close_redis()
-
-
-            self.render("CICD/edit.html",error=error,volumes=volumes,branches=branches,gitlabs=gitlabs, projects=projects,item=cicd,title="Edit CICD")
+            self.render("CICD/edit.html",item=cicd,title="Edit CICD")
             return
         except Exception as e:
             self.redirect(f"/cicd?e=system error: {e}")
     
     @tornado.web.authenticated
     async def post(self) -> None:
-        id= self.get_argument("id")
         try:
+            id= self.get_argument("id")
             gitlab= self.get_argument("gitlab")
             project= self.get_argument("project")
             branch= self.get_argument("branch")
@@ -1041,8 +1014,7 @@ class EditCICDHandler(BaseHandler):
 
             self.redirect("/cicd")
         except Exception as e:
-
-            self.redirect(f"/cicd/edit?id={id}&e=system error: {e}")
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
 
 class RunCICDHandler(BaseHandler):
     @tornado.web.authenticated
@@ -1113,6 +1085,9 @@ async def tornado_main():
         (r'/gitlab/credential/delete', DeleteGitlabHandler),
         (r'/gitlab/project', ListProjectGitlabHandler),
         (r'/gitlab/branch', ListBranchGitlabHandler),
+        (r'/api/gitlab/credential', ListGitlabAPIHandler),
+        (r'/api/gitlab/project', ListProjectGitlabAPIHandler),
+        (r'/api/gitlab/branch', ListBranchGitlabAPIHandler),
 
         (r'/docker/image', ListImageDockerHandler),
         (r'/docker/image/build', BuildImageDockerHandler),
@@ -1125,6 +1100,7 @@ async def tornado_main():
         (r'/docker/volume/create', CreateVolumeDockerHandler),
         (r'/docker/volume/delete', DeleteVolumeDockerHandler),
         (r'/docker/volume/download', DownloadVolumeDockerHandler),
+        (r'/api/docker/volume', ListVolumeDockerAPIHandler),
 
         (r'/monitor', ListMonitorHandler),
         (r'/monitor/start', StartMonitorHandler),
