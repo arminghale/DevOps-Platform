@@ -2,6 +2,9 @@
 
 sudo apt update
 
+# install basics
+sudo apt install net-tools iproute2 lsof
+
 # if python < 3.11 --> using ubuntu 20.4 which python3.8 is default
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt install python3.11
@@ -21,3 +24,7 @@ sudo ufw allow 'Nginx Full'
 
 # install requirements
 sudo python3 -m pip install -r requirements.txt
+
+# +x permission to bash script files
+find ../services/ -type f -iname "*.sh" -exec chmod +x {} \;
+find ../ports/ -type f -iname "*.sh" -exec chmod +x {} \;
