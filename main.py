@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import platform
 import shutil
 import socket
 import subprocess
@@ -25,7 +26,7 @@ import tornado.ioloop
 import tornado.web
 
 from GitlabModel import GitlabInfo
-from Repository import CICDHandler, DockerHandler, GitHandler, MonitorHandler, NginxHandler, UserHandler
+from Repository import CICDHandler, DockerHandler, GitHandler, MonitorHandler, NginxHandler, PortHandler, ServiceHandler, UserHandler
 from UserModel import User
 from CICDModel import CICD
 
@@ -87,6 +88,7 @@ class BaseHandler(tornado.web.RequestHandler):
             'items':[],
             'item':'',
             'nginx':NGINX,
+            'linux':LINUX
         })
         return namespace
 
@@ -161,7 +163,7 @@ class ListUserHandler(BaseHandler):
             self.render("User/list.html",items=users,title="Users List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class DeleteUserHandler(BaseHandler):
     @tornado.web.authenticated
@@ -296,7 +298,7 @@ class ListGitlabHandler(BaseHandler):
             self.render("Gitlab/list.html",items=gitlabs,title="Gitlabs List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class CreateGitlabHandler(BaseHandler):
     @tornado.web.authenticated
@@ -368,7 +370,7 @@ class ListProjectGitlabHandler(BaseHandler):
             self.render("Gitlab/project_list.html",items=projects,title="Gitlabs Projects List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class ListBranchGitlabHandler(BaseHandler):
     @tornado.web.authenticated
@@ -393,7 +395,7 @@ class ListBranchGitlabHandler(BaseHandler):
             self.render("Gitlab/branch_list.html",items=branches,title="Gitlabs Project Branches List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class ListGitlabAPIHandler(BaseHandler):
     @tornado.web.authenticated
@@ -460,7 +462,7 @@ class ListImageDockerHandler(BaseHandler):
             self.render("Docker/image_list.html",items=images,in_use=in_use,title="Docker Image List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class DeleteImageDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -606,7 +608,7 @@ class ListContainerDockerHandler(BaseHandler):
             self.render("Docker/container_list.html",items=containers,title="Docker Container List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class DeleteContainerDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -634,7 +636,7 @@ class ListVolumeDockerHandler(BaseHandler):
             self.render("Docker/volume_list.html",items=volumes,title="Docker Volume List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class CreateVolumeDockerHandler(BaseHandler):
     @tornado.web.authenticated
@@ -765,7 +767,7 @@ class ListMonitorHandler(BaseHandler):
             self.render("Monitor/list.html",items=monitors,in_use=in_use,href=href,title="Monitor List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class StartMonitorHandler(BaseHandler):
     @tornado.web.authenticated
@@ -815,7 +817,7 @@ class ListNginxHandler(BaseHandler):
             self.render("Nginx/list.html",items=nginxs,title="Nginx List")
             return
         except Exception as e:
-            self.redirect(f"/&e=system error: {e}")
+            self.redirect(f"/?e=system error: {e}")
 
 class CreateNginxHandler(BaseHandler):
     @tornado.web.authenticated
@@ -1054,6 +1056,98 @@ class RunCICDHandler(BaseHandler):
             self.redirect(f"/cicd?e=system error: {e}")
 
 
+class ListPortHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            _porthandler=PortHandler()
+            ports=_porthandler.get_list()
+            self.render("Port/list.html",items=ports,title="Open Ports List")
+            return
+        except Exception as e:
+            self.redirect(f"/home&e=system error: {e}")
+
+class OpenPortHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            self.render("Port/open.html",title="Open Port")
+            return
+        except Exception as e:
+            self.redirect(f"/nginx?e=system error: {e}")
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        try:
+            
+            port= self.get_argument("port")
+
+            _porthandler=PortHandler()
+            result=_porthandler.open_port(port)
+
+            self.redirect(f"/port?e={result}")
+        except Exception as e:
+            self.redirect(f"{self.get_uri_without_error()}&e=system error: {e}")
+
+class ClosePortHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            port=self.get_argument("port","")
+            if not port:
+                self.redirect("/port")
+
+            _porthandler=PortHandler()
+            result=_porthandler.close_port(port)
+
+            self.redirect(f"/port?e={result}")
+        except Exception as e:
+            self.redirect(f"/port?e=system error: {e}")
+
+
+class ListServiceHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            _servicehandler=ServiceHandler()
+            services=_servicehandler.get_services()
+            statuses=_servicehandler.get_services_status()
+            self.render("Service/list.html",items=services,status=statuses,title="Services List")
+            return
+        except Exception as e:
+            self.redirect(f"/?e=system error: {e}")
+
+class StartServiceHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            service=self.get_argument("service","")
+            if not service:
+                self.redirect("/service")
+
+            _servicehandler=ServiceHandler()
+            result=_servicehandler.start_service(service)
+
+            self.redirect(f"/service?e={result}")
+        except Exception as e:
+            self.redirect(f"/service?e=system error: {e}")
+
+class StopServiceHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def get(self) -> None:
+        try:
+            service=self.get_argument("service","")
+            if not service:
+                self.redirect("/service")
+
+            _servicehandler=ServiceHandler()
+            result=_servicehandler.stop_service(service)
+
+            self.redirect(f"/service?e={result}")
+        except Exception as e:
+            self.redirect(f"/service?e=system error: {e}")
+
+
 REDIS_PORT=6379
 REDIS_CONTAINER_NAME="redis_devops"
 REDIS_VOLUME_NAME="redis_devops"
@@ -1061,6 +1155,7 @@ REDIS_VOLUME_NAME="redis_devops"
 CONFIG_PORT=444
 
 NGINX=1
+LINUX=1
 
 async def tornado_main():
     settings = {
@@ -1074,6 +1169,7 @@ async def tornado_main():
         (r'/login', LoginHandler),
         (r'/logout', LogoutHandler),
         (r'/', HomeHandler),
+        (r'/home', HomeHandler),
 
         (r'/user', ListUserHandler),
         (r'/user/create', CreateUserHandler),
@@ -1116,6 +1212,14 @@ async def tornado_main():
         (r'/cicd/delete', DeleteCICDHandler),
         (r'/cicd/run', RunCICDHandler),
 
+        (r'/port', ListPortHandler),
+        (r'/port/open', OpenPortHandler),
+        (r'/port/close', ClosePortHandler),
+
+        (r'/service', ListServiceHandler),
+        (r'/service/start', StartServiceHandler),
+        (r'/service/stop', StopServiceHandler),
+
     ], **settings)
 
     app.listen(CONFIG_PORT)
@@ -1130,6 +1234,9 @@ if __name__ == '__main__':
     LOCAL_IPADDRESS='127.0.0.1'
 
     # Check everything is installed and in right version
+    if "Windows" in platform.system():
+        LINUX=0
+
     should_continue=1
     if sys.version_info[:2] < (3,11):
         should_continue=0

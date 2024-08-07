@@ -4,6 +4,8 @@ sudo apt update
 
 # install basics
 sudo apt install net-tools iproute2 lsof
+sudo apt install iptables-persistent
+sudo apt install dos2unix
 
 # if python < 3.11 --> using ubuntu 20.4 which python3.8 is default
 sudo add-apt-repository ppa:deadsnakes/ppa
@@ -26,5 +28,9 @@ sudo ufw allow 'Nginx Full'
 sudo python3 -m pip install -r requirements.txt
 
 # +x permission to bash script files
-find ../services/ -type f -iname "*.sh" -exec chmod +x {} \;
-find ../ports/ -type f -iname "*.sh" -exec chmod +x {} \;
+find ./services/ -type f -iname "*.sh" -exec chmod +x {} \;
+find ./ports/ -type f -iname "*.sh" -exec chmod +x {} \;
+
+# dos to unix
+find ./ports/ -type f -iname "*.sh" -exec dos2unix {} \;
+find ./services/ -type f -iname "*.sh" -exec dos2unix {} \;

@@ -10,6 +10,8 @@ Hey there! Welcome to your one-stop platform for managing projects and deploymen
 - **Nginx Configurations**: If you have Nginx installed, manage configurations directly—add new ones or remove old ones without diving into Nginx files.
 - **Monitoring Systems**: Activate default configurations for monitoring systems like Grafana or Prometheus with ease.
 - **CI/CD Systems**: Managing configuration, create/edit/delete CI/CD configes and execute them with one click.
+- **Port Management**: Open or Close ports and see what service listens to which port.
+- **Services System**: Install and activate define services, something like plugins. (linux only and Databases for now)
 
 ### A Little Disclaimer 🐞
 This is my first version, and I'm new to this! It has a few bugs and isn't fully complete. I'd love your feedback—there are definitely more stable and high-performance tools out there, but hey, I wanted to give this a shot. (Be kind, okay? 😉)
@@ -19,7 +21,7 @@ This is my first version, and I'm new to this! It has a few bugs and isn't fully
 ### Tested Environments
 - **Windows**: 10 (22H2)
 - **Ubuntu**: 20.04
-- **Requirements**: Python 3.11+ and Docker 24.0+, Nginx is optional.
+- **Requirements**: Python 3.11+ and Docker 24.0+, Nginx is optional. `script.sh` in setup folder can do all the hard works for you
 
 ### How to Run
 1. **Run Main Script**: Just fire up `main.py` (after installing requirements.txt).
@@ -27,7 +29,7 @@ This is my first version, and I'm new to this! It has a few bugs and isn't fully
    - **Default Authentication**: Located in the setup folder.
    - You can tweak settings in `main.py`.
 
-2. **Ubuntu Setup**: Everything you need is in the setup folder, including how to copy files to a remote server with SSH. 😅
+2. **Ubuntu Setup**: Everything you need is in the setup folder (`script.sh`), including how to copy files to a remote server with SSH. 😅
 
 > Remember the classic line: "It works on my machine!" 😅
 

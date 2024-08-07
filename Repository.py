@@ -1,4 +1,5 @@
 ﻿import json
+import logging
 import os
 import shutil
 import subprocess
@@ -262,10 +263,10 @@ class DockerHandler:
 
 class MonitorHandler:
     def __init__(self):
-        pass
+        self.directory=f"{os.path.dirname(__file__)}/monitors/"
 
     def get_monitors(self):
-        return list(m.name for m in os.scandir("./monitors") if m.is_dir())
+        return list(m.name for m in os.scandir(self.directory) if m.is_dir())
     
     def get_in_use_href_monitors(self):
         _dockerhandler=DockerHandler()
@@ -275,7 +276,7 @@ class MonitorHandler:
         for m in self.get_monitors():
             if next((x for x in containers if x.name == m), None):
                 in_use.append("active")
-                with open(f'./monitors/{m}/setting.json','r',encoding="utf-8-sig") as f:
+                with open(f'{self.directory}/{m}/setting.json','r',encoding="utf-8-sig") as f:
                     href.append(json.loads(f.read())['ip:port'])
             else: 
                 in_use.append("deactivate")
@@ -284,7 +285,7 @@ class MonitorHandler:
         return in_use,href
 
     def start_monitor(self,id:str):
-        proc=subprocess.Popen([f'docker','compose','-f',f'./monitors/{id}/docker-compose.yml','up','-d'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        proc=subprocess.Popen([f'docker','compose','-f',f'{self.directory}{id}/docker-compose.yml','up','-d'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
         return proc.communicate()
 
     def stop_monitor(self,id:str):
@@ -372,6 +373,56 @@ class CICDHandler:
         cicds[index]=cicd
         self.redis.set("cicds",json.dumps(cicds))
 
+class PortHandler:
+    def __init__(self):
+        self.list_script=f"{os.path.dirname(__file__)}/ports/list.sh"
+        self.open_script=f"{os.path.dirname(__file__)}/ports/open.sh"
+        self.close_script=f"{os.path.dirname(__file__)}/ports/close.sh"
 
+    def get_list(self):
+        list_proc=subprocess.Popen(f'"{self.list_script}"', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        list,_=list_proc.communicate()
+        lines = list.decode("utf-8").splitlines()
+        lines=lines[1:]
+        open_ports={}
+        for line in lines:
+            if len(line.split()) == 2:
+                open_ports[line.split()[0]]=line.split()[1]
 
+        return open_ports
 
+    def open_port(self,port:str):
+        open_proc=subprocess.Popen(f'"{self.open_script}" {port}', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        open,_=open_proc.communicate()
+        result=open.decode("utf-8")
+        return result.splitlines()[-1]
+    
+    def close_port(self,port:str):
+        close_proc=subprocess.Popen(f'"{self.close_script}" {port}', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        close,_=close_proc.communicate()
+        result=close.decode("utf-8")
+        return result.splitlines()[-1]
+     
+class ServiceHandler:
+    def __init__(self):
+        self.directory=f"{os.path.dirname(__file__)}/services/"
+
+    def get_services(self):
+        return list(m.name.split(".sh")[0] for m in os.scandir(self.directory) if not m.is_dir() and "check.sh" not in m.name)
+
+    def get_services_status(self):
+        status=[]
+        for s in self.get_services():
+            check_proc=subprocess.Popen(f'"{self.directory}/check.sh" {s}', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+            status.append(check_proc.communicate()[0].decode())
+        return status
+         
+    def start_service(self,service):
+        start_proc=subprocess.Popen(f'"{self.directory}/{service}.sh"', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        return start_proc.communicate()[0].decode().splitlines()[-1]
+
+    def stop_service(self,service):
+        stop_proc=subprocess.Popen(f'systemctl stop {service}', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,shell=True)
+        stop=stop_proc.communicate()[0].decode() 
+        return stop if not stop else "ok"
+ 

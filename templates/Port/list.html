@@ -1,0 +1,43 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<div id="alldevices">
+    <div class="form-inline mx-sm-3 mb-2">
+        <a class="form-control btn btn-success" href="/port/open">Open Port</a>
+    </div>
+
+    <br>
+    <!-- device's list -->
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">
+                    Port
+                </th>
+                <th scope="col">
+                    Service
+                </th>
+                <th>{{ len(items) }}</th>
+            </tr>
+        </thead>
+        <tbody id="tbod">
+            {% for port,service in items.items() %}
+                <tr>
+                    <td>
+                        {{ port }}
+                    </td>
+                    <td>
+                        {{ service }}
+                    </td>
+                    <td>
+                        <div>
+                            <a class="btn btn-danger" href="/port/close?port={{ port}}">Close</a>
+                        </div>
+                    </td>
+                </tr>
+            {% end %}
+        </tbody>
+    </table>
+    
+</div>
+{% end %}

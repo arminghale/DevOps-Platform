@@ -93,6 +93,24 @@
                         </li>
                     </ul>
                 </li> 
+                {% if linux>0 %}
+                <li>
+                    <a href="#_6" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">Port</a>
+                    <ul class="collapse list-unstyled" id="_6">
+                        <li>
+                            <a href="javascript:;" id="a_0" onclick="action(event,'/port')">Ports</a>
+                        </li>
+                    </ul>
+                </li>   
+                <li>
+                    <a href="#_7" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">Service</a>
+                    <ul class="collapse list-unstyled" id="_7">
+                        <li>
+                            <a href="javascript:;" id="a_0" onclick="action(event,'/service')">Services</a>
+                        </li>
+                    </ul>
+                </li> 
+                {% end %}
                 <li>
                     <a href="/logout">Logout</a>
                 </li>

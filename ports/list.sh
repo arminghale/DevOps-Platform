@@ -24,23 +24,23 @@ fi
 
 # Function to display open ports and services using netstat
 show_open_ports_netstat() {
-    echo "Open ports and listening services (using netstat):"
-    netstat -tuln | grep LISTEN
-    echo
-    echo "Services listening on open ports (using netstat and lsof):"
+    echo "Port Service"
     netstat -tuln | grep LISTEN | awk '{print $4}' | sed 's/.*://' | while read port; do
-        lsof -i :"$port" | grep LISTEN
+        service=$(lsof -i :"$port" | grep LISTEN | awk 'NR==1{print $1}')
+        if [ -n "$service" ]; then
+            echo "$port $service"
+        fi
     done
 }
 
 # Function to display open ports and services using ss
 show_open_ports_ss() {
-    echo "Open ports and listening services (using ss):"
-    ss -tuln | grep LISTEN
-    echo
-    echo "Services listening on open ports (using ss and lsof):"
+    echo "Port Service"
     ss -tuln | grep LISTEN | awk '{print $5}' | sed 's/.*://' | while read port; do
-        lsof -i :"$port" | grep LISTEN
+        service=$(lsof -i :"$port" | grep LISTEN | awk 'NR==1{print $1}')
+        if [ -n "$service" ]; then
+            echo "$port $service"
+        fi
     done
 }
 

@@ -1,0 +1,13 @@
+﻿{% extends "../base.html" %}
+
+{% block body %}
+<form id="form" action="/port/open" method="post">
+    <div class="form-row" id="createform">
+        <div class="form-group col-md-4">
+            <label class="control-label col-md-12" style="font-weight: bold;text-align:center;">Port</label>
+            <input class="form-control" name="port" value="" required/>
+        </div>
+    </div>
+    <input type="submit" value="Submit" class="btn btn-success btn-lg" />
+</form>
+{% end %}
